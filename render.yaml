@@ -2,6 +2,7 @@ services:
   - type: web
     name: tomtom-chess-online
     runtime: node
+    numInstances: 1
     buildCommand: npm install && npm run build
     startCommand: npm start
     healthCheckPath: /health

@@ -22,10 +22,24 @@
  async function syncResult(result){const a=authUser();if(!a)return;try{const d=await request('/api/result',{method:'POST',body:JSON.stringify({...a,result})});applyUser(d.user);await request('/api/game',{method:'POST',body:JSON.stringify({...a,game:{players:[a.username],result,moves:moveLog}})});}catch(e){console.warn('online result',e.message)}}
  window.tomtomSyncResult=syncResult;
  function matchmake(){
-   const send=()=>{sendOnline({type:'matchmake',name:profile.name,username:account.username||'guest'});$('roomMessage').textContent='⏳ در صف پیدا کردن حریف…';$('roomMessage').classList.add('match-wait')};
-   if(typeof waitForOnline==='function'){waitForOnline().then(send).catch(e=>{$('roomMessage').textContent=e.message||'اتصال WebSocket برقرار نشد.'})}
-   else {const ws=connectOnline();if(!ws)return;if(ws.readyState===WebSocket.OPEN)send();else ws.addEventListener('open',send,{once:true});}
+   const box=$('roomMessage');
+   if(window.__tomtomSearching){
+     if(typeof sendOnline==='function')sendOnline({type:'cancel_matchmake'});
+     window.__tomtomSearching=false;
+     box.textContent='⏹ جستجوی حریف متوقف شد.';
+     box.classList.remove('match-wait');
+     const mm=$('matchmakeBtn');if(mm)mm.textContent='⚡ بازی سریع با حریف تصادفی';
+     return;
+   }
+   window.__tomtomSearching=true;box.textContent='⏳ در حال اتصال و جستجوی حریف…';box.classList.add('match-wait');const mm=$('matchmakeBtn');if(mm)mm.textContent='⏹ توقف جستجو';
+   const request=(typeof onlineRequest==='function')?onlineRequest:null;
+   if(!request){window.__tomtomSearching=false;box.classList.remove('match-wait');box.textContent='ماژول آنلاین آماده نیست.';return}
+   request('matchmake',{name:profile.name,username:account.username||'guest'},120000).then(m=>{
+     if(m.type==='match_waiting')box.textContent='⏳ در صف پیدا کردن حریف…';
+     if(m.type==='match_found')window.__tomtomSearching=false;
+   }).catch(e=>{window.__tomtomSearching=false;box.classList.remove('match-wait');const mm=$('matchmakeBtn');if(mm)mm.textContent='⚡ بازی سریع با حریف تصادفی';box.textContent=e.message||'جستجوی حریف انجام نشد.'});
  }
+
  // Add identity to room creation/join payloads by wrapping the socket send path is not necessary for gameplay,
  // but the server stores the display name already. Matchmaking uses the current profile directly.
  $('loginBtn').addEventListener('click',()=>{ if(typeof openHomePanelNav==='function') { openHomePanelNav(accountPanel); } else { accountPanel.classList.add('show');accountPanel.setAttribute('aria-hidden','false'); } });

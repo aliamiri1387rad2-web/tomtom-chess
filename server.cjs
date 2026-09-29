@@ -93,7 +93,8 @@ const server=http.createServer((req,res)=>{
  })
 });
 const wss=new WebSocket.Server({server});
-// Keep mobile WebSocket connections healthy and remove dead clients.
+// One in-memory lobby/room registry is safe only while this service has one
+// active process/instance. render.yaml pins this service to one instance.
 const heartbeat=setInterval(()=>{
  for(const ws of wss.clients){
   if(ws.isAlive===false){try{ws.terminate()}catch(_){};continue}
@@ -101,27 +102,82 @@ const heartbeat=setInterval(()=>{
  }
 },30000);
 wss.on('close',()=>clearInterval(heartbeat));
+function detachFromRoom(ws){
+ const oldId=ws.room;
+ if(!oldId)return;
+ const old=rooms.get(oldId);
+ if(old){
+  old.players=old.players.filter(p=>p.ws!==ws);
+  if(old.players.length)broadcast(old,snapshot(old));
+  else rooms.delete(oldId);
+ }
+ ws.room=null;ws.color=null;
+}
+function removeFromQueue(ws){const qi=queue.indexOf(ws);if(qi>=0)queue.splice(qi,1)}
+function requestError(ws,reqId,message){send(ws,{type:'error',reqId,message})}
+function queueMatchmake(ws,reqId,msg){
+ removeFromQueue(ws);detachFromRoom(ws);ws.name=String(msg.name||'PLAYER').slice(0,24);ws.username=String(msg.username||'');
+ const other=queue.shift();
+ if(other && other.readyState===WebSocket.OPEN){
+  const id=code(),room={code:id,players:[],lastMove:null};
+  const a={ws:other,color:'w',name:other.name||'PLAYER',username:other.username||''};
+  const b={ws,color:'b',name:ws.name||'PLAYER',username:ws.username||''};
+  room.players.push(a,b);rooms.set(id,room);other.room=id;other.color='w';ws.room=id;ws.color='b';
+  send(other,{type:'match_found',reqId:other.__matchReqId||null,room:id,color:'w'});
+  send(ws,{type:'match_found',reqId,room:id,color:'b'});
+  broadcast(room,snapshot(room));
+ }else{
+  if(other && other.readyState!==WebSocket.OPEN)removeFromQueue(other);
+  ws.__matchReqId=reqId;queue.push(ws);send(ws,{type:'match_waiting',reqId});
+ }
+}
 wss.on('connection',ws=>{
- ws.isAlive=true;
+ ws.isAlive=true;ws.room=null;ws.color=null;ws.name='PLAYER';ws.username='';ws.__matchReqId=null;
  ws.on('pong',()=>{ws.isAlive=true});
  ws.on('error',()=>{});
- ws.on('message',raw=>{let msg;try{msg=JSON.parse(raw.toString())}catch{return}
-  if(msg.type==='matchmake'){
-   if(queue.includes(ws))return;if(queue.length){const other=queue.shift();const id=code();const room={code:id,players:[]};const a={ws:other,color:'w',name:other.name||'PLAYER',username:other.username||''},b={ws,color:'b',name:ws.name||'PLAYER',username:ws.username||''};room.players.push(a,b);rooms.set(id,room);other.room=id;other.color='w';ws.room=id;ws.color='b';send(other,{type:'match_found',room:id,color:'w'});send(ws,{type:'match_found',room:id,color:'b'});broadcast(room,snapshot(room));
-   }else{queue.push(ws);send(ws,{type:'match_waiting'});return}
+ send(ws,{type:'connected'});
+ ws.on('message',raw=>{
+  let msg;try{msg=JSON.parse(raw.toString())}catch(_){return}
+  const reqId=msg.reqId||null;
+  if(msg.type==='matchmake'){return queueMatchmake(ws,reqId,msg)}
+  if(msg.type==='cancel_matchmake'){
+   removeFromQueue(ws);ws.__matchReqId=null;send(ws,{type:'match_cancelled',reqId});return;
   }
   if(msg.type==='create_room'){
-   let id=String(msg.room||'').trim().toUpperCase();if(id&&!validRoomCode(id))return send(ws,{type:'error',message:'کد اتاق باید ۳ تا ۸ حرف انگلیسی یا عدد باشد.'});if(!id)id=code();while(rooms.has(id))id=code();const room={code:id,players:[],lastMove:null};const p={ws,color:'w',name:String(msg.name||'PLAYER 1').slice(0,24),username:String(msg.username||'')};room.players.push(p);rooms.set(id,room);ws.room=id;ws.color='w';ws.name=p.name;ws.username=p.username;send(ws,{type:'room_created',room:id,color:'w'});send(ws,snapshot(room));return
+   removeFromQueue(ws);detachFromRoom(ws);
+   let id=String(msg.room||'').trim().toUpperCase();
+   if(id&&!validRoomCode(id))return requestError(ws,reqId,'کد اتاق باید ۳ تا ۸ حرف انگلیسی یا عدد باشد.');
+   if(!id)id=code();
+   if(rooms.has(id))return requestError(ws,reqId,'این کد اتاق قبلاً استفاده شده است. یک کد دیگر وارد کنید.');
+   const room={code:id,players:[],lastMove:null};
+   const p={ws,color:'w',name:String(msg.name||'PLAYER 1').slice(0,24),username:String(msg.username||'')};
+   room.players.push(p);rooms.set(id,room);ws.room=id;ws.color='w';ws.name=p.name;ws.username=p.username;
+   send(ws,{type:'room_created',reqId,room:id,color:'w'});send(ws,snapshot(room));return;
   }
   if(msg.type==='join_room'){
-   const id=String(msg.room||'').trim().toUpperCase(),room=rooms.get(id);if(!room)return send(ws,{type:'error',message:'اتاق پیدا نشد.'});if(room.players.length>=2)return send(ws,{type:'error',message:'این اتاق پر است.'});const p={ws,color:'b',name:String(msg.name||'PLAYER 2').slice(0,24),username:String(msg.username||'')};room.players.push(p);ws.room=id;ws.color='b';ws.name=p.name;ws.username=p.username;send(ws,{type:'room_joined',room:id,color:'b'});broadcast(room,snapshot(room));return
+   removeFromQueue(ws);
+   const id=String(msg.room||'').trim().toUpperCase(),room=rooms.get(id);
+   if(!room)return requestError(ws,reqId,'اتاق پیدا نشد. مطمئن شوید کد را دقیق وارد کرده‌اید و صاحب اتاق هنوز آنلاین است.');
+   if(room.players.some(p=>p.ws===ws))return requestError(ws,reqId,'این اتصال همین حالا صاحب این اتاق است. برای ورود به اتاق، از دستگاه یا مرورگر دوم استفاده کنید.');
+   if(room.players.length>=2)return requestError(ws,reqId,'این اتاق پر است.');
+   detachFromRoom(ws);
+   const p={ws,color:'b',name:String(msg.name||'PLAYER 2').slice(0,24),username:String(msg.username||'')};
+   room.players.push(p);ws.room=id;ws.color='b';ws.name=p.name;ws.username=p.username;
+   send(ws,{type:'room_joined',reqId,room:id,color:'b'});broadcast(room,snapshot(room));return;
   }
-  const room=rooms.get(ws.room);if(!room)return;
-  if(msg.type==='move'){if(msg.color!==ws.color)return send(ws,{type:'error',message:'بازیکن نامعتبر.'});room.lastMove=msg.move;broadcast(room,{type:'remote_move',move:msg.move,color:ws.color},ws)}
-  else if(msg.type==='new_game'){room.lastMove=null;broadcast(room,{type:'new_game'},ws)}
+  const room=rooms.get(ws.room);if(!room)return requestError(ws,reqId,'این اتصال هنوز وارد اتاقی نشده است.');
+  if(msg.type==='move'){
+   if(msg.color!==ws.color)return requestError(ws,reqId,'بازیکن نامعتبر.');
+   room.lastMove=msg.move;broadcast(room,{type:'remote_move',move:msg.move,color:ws.color},ws);
+  }else if(msg.type==='new_game'){room.lastMove=null;broadcast(room,{type:'new_game'},ws)}
   else if(msg.type==='resign'){broadcast(room,{type:'resigned',color:ws.color},ws)}
   else if(msg.type==='chat'){const text=String(msg.text||'').trim().slice(0,180);if(!text)return;broadcast(room,{type:'chat',text,name:ws.name||'PLAYER',color:ws.color,at:Date.now()},null)}
-  else if(msg.type==='ping')send(ws,{type:'pong'})
- });ws.on('close',()=>leave(ws));
+  else if(msg.type==='ping')send(ws,{type:'pong',reqId});
+ });
+ ws.on('close',()=>{removeFromQueue(ws);detachFromRoom(ws)});
 });
-server.listen(PORT,()=>console.log(`TOMTOM CHESS server: http://localhost:${PORT}`));
+
+// A client-side application ping keeps a live queue/session active on platforms
+// that may otherwise stop an idle service. This also gives the client a simple
+// request/response health signal at the WebSocket layer.
+server.listen(PORT,'0.0.0.0',()=>console.log(`TOMTOM CHESS server listening on ${PORT}`));
