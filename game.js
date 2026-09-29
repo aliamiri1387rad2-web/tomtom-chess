@@ -960,17 +960,29 @@ const musicEnabledEl=document.getElementById('musicEnabled');const masterVolumeE
 
 
 // ===== ONLINE ARENA CONNECTION =====
-function serverBase(){return (localStorage.getItem('tomtom_server_url')||'https://tomtom-chess.onrender.com').replace(/\/$/,'')}
+function serverBase(){
+  let v=(localStorage.getItem('tomtom_server_url')||'https://tomtom-chess.onrender.com').trim();
+  v=v.replace(/\/health$/i,'').replace(/\/$/,'');
+  return v;
+}
 function sendOnline(msg){if(online.ws&&online.ws.readyState===WebSocket.OPEN)online.ws.send(JSON.stringify(msg))}
 function addChat(name,text,me=false){const box=document.getElementById('chatMessages');if(!box)return;box.querySelector('.chat-empty')?.remove();const el=document.createElement('div');el.className='chat-msg'+(me?' me':'');const b=document.createElement('b');b.textContent=me?'شما':name;const sp=document.createElement('span');sp.textContent=text;el.append(b,sp);box.appendChild(el);box.scrollTop=box.scrollHeight}
 function connectOnline(){
   if(online.ws&&[WebSocket.OPEN,WebSocket.CONNECTING].includes(online.ws.readyState))return online.ws;
-  let url=serverBase();try{const u=new URL(url);u.protocol=u.protocol==='https:'?'wss:':'ws:';url=u.toString()}catch(_){$('onlineState').textContent='آدرس سرور نامعتبر';return null}
+  let url=serverBase();
+  try{
+    const u=new URL(url);
+    if(u.protocol==='https:')u.protocol='wss:';
+    else if(u.protocol==='http:')u.protocol='ws:';
+    if(!/^wss?:$/.test(u.protocol))throw new Error('protocol');
+    url=u.toString();
+  }catch(_){$('onlineState').textContent='آدرس سرور نامعتبر';return null}
   const ws=new WebSocket(url);online.ws=ws;
   $('onlineState').textContent='در حال اتصال…';$('onlineDot').classList.remove('connected');
-  ws.addEventListener('open',()=>{online.connected=true;$('onlineState').textContent='متصل به سرور';$('onlineDot').classList.add('connected')});
-  ws.addEventListener('close',()=>{online.connected=false;online.started=false;$('onlineState').textContent='قطع شد';$('onlineDot').classList.remove('connected')});
-  ws.addEventListener('error',()=>{$('onlineState').textContent='خطا در اتصال'});
+  const failTimer=setTimeout(()=>{if(ws.readyState===WebSocket.CONNECTING){try{ws.close()}catch(_){} $('onlineState').textContent='اتصال WebSocket برقرار نشد';}},8000);
+  ws.addEventListener('open',()=>{clearTimeout(failTimer);online.connected=true;$('onlineState').textContent='متصل به سرور';$('onlineDot').classList.add('connected')});
+  ws.addEventListener('close',()=>{clearTimeout(failTimer);online.connected=false;online.started=false;if(online.ws===ws)online.ws=null;$('onlineState').textContent='اتصال قطع شد';$('onlineDot').classList.remove('connected')});
+  ws.addEventListener('error',()=>{$('onlineState').textContent='خطا در WebSocket'});
   ws.addEventListener('message',ev=>{let m;try{m=JSON.parse(ev.data)}catch(_){return}
     if(m.type==='room_created'||m.type==='room_joined'){online.room=m.room;online.color=m.color;online.started=false;$('roomCode').value=m.room;$('roomMessage').textContent='اتاق '+m.room+' آماده است؛ منتظر بازیکن دوم…'}
     else if(m.type==='room_state'){online.room=m.room;online.started=!!m.started;$('roomMessage').textContent=m.started?'حریف وارد شد؛ بازی شروع شد.':'منتظر بازیکن دوم…';$('chatState').textContent=m.started?'آنلاین':'منتظر'}
@@ -984,14 +996,37 @@ function connectOnline(){
   });
   return ws;
 }
+
 window.connectOnline=connectOnline;window.sendOnline=sendOnline;
 const serverInput=document.getElementById('serverUrlInput');
 const savedServer=localStorage.getItem('tomtom_server_url');if(serverInput&&savedServer)serverInput.value=savedServer;
-const saveServerBtn=document.getElementById('saveServerUrl');if(saveServerBtn)saveServerBtn.addEventListener('click',()=>{const v=serverInput.value.trim().replace(/\/$/,'');if(v){localStorage.setItem('tomtom_server_url',v);document.getElementById('roomMessage').textContent='آدرس سرور ذخیره شد.'}});
-const testServerBtn=document.getElementById('testServer');if(testServerBtn)testServerBtn.addEventListener('click',async()=>{try{const r=await fetch(serverBase()+'/health');const d=await r.json();document.getElementById('roomMessage').textContent=d.ok?'سرور سالم و در دسترس است.':'سرور پاسخ نامعتبر داد.'}catch(e){document.getElementById('roomMessage').textContent='اتصال به سرور برقرار نشد.'}});
+const saveServerBtn=document.getElementById('saveServerUrl');if(saveServerBtn)saveServerBtn.addEventListener('click',()=>{let v=serverInput.value.trim().replace(/\/health$/i,'').replace(/\/$/,'');if(v){localStorage.setItem('tomtom_server_url',v);serverInput.value=v;document.getElementById('roomMessage').textContent='آدرس سرور ذخیره شد.'}});
+const testServerBtn=document.getElementById('testServer');if(testServerBtn)testServerBtn.addEventListener('click',async()=>{
+  const box=document.getElementById('roomMessage');box.textContent='در حال تست HTTP و WebSocket…';
+  try{
+    const r=await fetch(serverBase()+'/health',{cache:'no-store'});const d=await r.json();
+    if(!d.ok)throw new Error('HTTP health failed');
+    const ws=connectOnline();
+    if(!ws)throw new Error('آدرس WebSocket نامعتبر است');
+    if(ws.readyState===WebSocket.OPEN){box.textContent='سرور و WebSocket سالم و متصل هستند.';return}
+    await new Promise((resolve,reject)=>{const t=setTimeout(()=>reject(new Error('timeout')),8000);ws.addEventListener('open',()=>{clearTimeout(t);resolve()}, {once:true});ws.addEventListener('error',()=>{clearTimeout(t);reject(new Error('websocket'))},{once:true});});
+    box.textContent='سرور و WebSocket سالم و متصل هستند.';
+  }catch(e){box.textContent='HTTP در دسترس است، اما WebSocket وصل نشد.';console.warn('online test',e)}
+});
 const closeOnlineBtn=document.getElementById('closeOnline');if(closeOnlineBtn)closeOnlineBtn.addEventListener('click',closeCurrentPanel);
-const hostRoomBtn=document.getElementById('hostRoom');if(hostRoomBtn)hostRoomBtn.addEventListener('click',()=>{const ws=connectOnline();const send=()=>sendOnline({type:'create_room',room:document.getElementById('roomCode').value.trim(),name:profile.name,username:localStorage.getItem('tomtom_username')||''});if(ws?.readyState===WebSocket.OPEN)send();else ws?.addEventListener('open',send,{once:true})});
-const joinRoomBtn=document.getElementById('joinRoom');if(joinRoomBtn)joinRoomBtn.addEventListener('click',()=>{const ws=connectOnline();const send=()=>sendOnline({type:'join_room',room:document.getElementById('roomCode').value.trim(),name:profile.name,username:localStorage.getItem('tomtom_username')||''});if(ws?.readyState===WebSocket.OPEN)send();else ws?.addEventListener('open',send,{once:true})});
+const hostRoomBtn=document.getElementById('hostRoom');if(hostRoomBtn)hostRoomBtn.addEventListener('click',()=>{
+  const code=(document.getElementById('roomCode').value||'').trim();
+  const ws=connectOnline();
+  const send=()=>sendOnline({type:'create_room',room:code,name:profile.name,username:localStorage.getItem('tomtom_username')||''});
+  if(ws?.readyState===WebSocket.OPEN)send();else if(ws)ws.addEventListener('open',send,{once:true});else document.getElementById('roomMessage').textContent='اتصال WebSocket برقرار نشد.';
+});
+const joinRoomBtn=document.getElementById('joinRoom');if(joinRoomBtn)joinRoomBtn.addEventListener('click',()=>{
+  const code=(document.getElementById('roomCode').value||'').trim();
+  if(!code){document.getElementById('roomMessage').textContent='کد اتاق را وارد کنید.';return}
+  const ws=connectOnline();
+  const send=()=>sendOnline({type:'join_room',room:code,name:profile.name,username:localStorage.getItem('tomtom_username')||''});
+  if(ws?.readyState===WebSocket.OPEN)send();else if(ws)ws.addEventListener('open',send,{once:true});else document.getElementById('roomMessage').textContent='اتصال WebSocket برقرار نشد.';
+});
 const copyRoomBtn=document.getElementById('copyRoom');if(copyRoomBtn)copyRoomBtn.addEventListener('click',()=>navigator.clipboard?.writeText(document.getElementById('roomCode').value).then(()=>document.getElementById('roomMessage').textContent='کد اتاق کپی شد.').catch(()=>{}));
 
 // ===== HOME SCREEN =====

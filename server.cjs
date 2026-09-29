@@ -12,6 +12,7 @@ function persist(){try{fs.writeFileSync(DB_FILE,JSON.stringify(db,null,2))}catch
 function hash(s){return crypto.createHash('sha256').update(String(s)).digest('hex')}
 function token(){return crypto.randomBytes(24).toString('hex')}
 function code(){return crypto.randomBytes(3).toString('hex').toUpperCase()}
+function validRoomCode(v){return /^[A-Z0-9]{3,8}$/.test(v)}
 function send(ws,data){if(ws&&ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify(data))}
 function broadcast(room,data,except){for(const p of room.players)if(p.ws!==except)send(p.ws,data)}
 function safeUser(u){return {username:u.username,name:u.name,rating:u.rating,wins:u.wins,losses:u.losses,draws:u.draws,level:u.level,xp:u.xp}}
@@ -92,14 +93,25 @@ const server=http.createServer((req,res)=>{
  })
 });
 const wss=new WebSocket.Server({server});
+// Keep mobile WebSocket connections healthy and remove dead clients.
+const heartbeat=setInterval(()=>{
+ for(const ws of wss.clients){
+  if(ws.isAlive===false){try{ws.terminate()}catch(_){};continue}
+  ws.isAlive=false;try{ws.ping()}catch(_){ }
+ }
+},30000);
+wss.on('close',()=>clearInterval(heartbeat));
 wss.on('connection',ws=>{
+ ws.isAlive=true;
+ ws.on('pong',()=>{ws.isAlive=true});
+ ws.on('error',()=>{});
  ws.on('message',raw=>{let msg;try{msg=JSON.parse(raw.toString())}catch{return}
   if(msg.type==='matchmake'){
    if(queue.includes(ws))return;if(queue.length){const other=queue.shift();const id=code();const room={code:id,players:[]};const a={ws:other,color:'w',name:other.name||'PLAYER',username:other.username||''},b={ws,color:'b',name:ws.name||'PLAYER',username:ws.username||''};room.players.push(a,b);rooms.set(id,room);other.room=id;other.color='w';ws.room=id;ws.color='b';send(other,{type:'match_found',room:id,color:'w'});send(ws,{type:'match_found',room:id,color:'b'});broadcast(room,snapshot(room));
    }else{queue.push(ws);send(ws,{type:'match_waiting'});return}
   }
   if(msg.type==='create_room'){
-   let id=String(msg.room||'').trim().toUpperCase()||code();while(rooms.has(id))id=code();const room={code:id,players:[],lastMove:null};const p={ws,color:'w',name:String(msg.name||'PLAYER 1').slice(0,24),username:String(msg.username||'')};room.players.push(p);rooms.set(id,room);ws.room=id;ws.color='w';ws.name=p.name;ws.username=p.username;send(ws,{type:'room_created',room:id,color:'w'});send(ws,snapshot(room));return
+   let id=String(msg.room||'').trim().toUpperCase();if(id&&!validRoomCode(id))return send(ws,{type:'error',message:'کد اتاق باید ۳ تا ۸ حرف انگلیسی یا عدد باشد.'});if(!id)id=code();while(rooms.has(id))id=code();const room={code:id,players:[],lastMove:null};const p={ws,color:'w',name:String(msg.name||'PLAYER 1').slice(0,24),username:String(msg.username||'')};room.players.push(p);rooms.set(id,room);ws.room=id;ws.color='w';ws.name=p.name;ws.username=p.username;send(ws,{type:'room_created',room:id,color:'w'});send(ws,snapshot(room));return
   }
   if(msg.type==='join_room'){
    const id=String(msg.room||'').trim().toUpperCase(),room=rooms.get(id);if(!room)return send(ws,{type:'error',message:'اتاق پیدا نشد.'});if(room.players.length>=2)return send(ws,{type:'error',message:'این اتاق پر است.'});const p={ws,color:'b',name:String(msg.name||'PLAYER 2').slice(0,24),username:String(msg.username||'')};room.players.push(p);ws.room=id;ws.color='b';ws.name=p.name;ws.username=p.username;send(ws,{type:'room_joined',room:id,color:'b'});broadcast(room,snapshot(room));return
