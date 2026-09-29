@@ -1,27 +1,20 @@
-# TOMTOM CHESS ONLINE V10
+# TOMTOM CHESS — V62 APK/WEB package
 
-این بسته برای Deploy عمومی با Node.js + WebSocket آماده است.
+This package keeps the original TOMTOM CHESS game and wraps it in a standard React + Vite project so mobile app builders can recognize and compile it.
 
-## Deploy روی Render
+## Build
+- `npm install`
+- `npm run build`
+- `npm start`
 
-1. پروژه را در GitHub قرار دهید.
-2. در Render یک **Web Service** بسازید و Repository را انتخاب کنید.
-3. Build Command: `npm install`
-4. Start Command: `npm start`
-5. Health Check: `/health`
-6. بعد از Deploy یک آدرس شبیه `https://YOUR-SERVICE.onrender.com` می‌گیرید.
-7. همان آدرس را داخل بخش «آدرس سرور اینترنتی» بازی وارد و «ذخیره سرور» کنید.
-8. «تست اتصال» باید پیام «سرور آنلاین است» بدهد.
+## Online server
+The game uses:
+`https://tomtom-chess.onrender.com`
 
-Render برای Web Service از WebSocket ورودی پشتیبانی می‌کند و اتصال عمومی باید با `wss://` روی HTTPS انجام شود.
+WebSocket is automatically converted to `wss://` when the server URL uses HTTPS.
 
-## تست واقعی دو گوشی
+Health check:
+`https://tomtom-chess.onrender.com/health`
 
-- گوشی اول: آدرس سرور را وارد → ساخت اتاق → کد را ارسال کن.
-- گوشی دوم: همان آدرس سرور → ورود به اتاق → کد.
-- برای تست واقعی، بهتر است دو دستگاه روی دو اینترنت متفاوت باشند.
-- بعد از اتصال، حرکت و چت باید لحظه‌ای منتقل شوند.
-
-## نکته ذخیره اطلاعات
-
-این نسخه برای تست آنلاین مناسب است. فایل `tomtom-data.json` روی فایل‌سیستم محلی ذخیره می‌شود؛ برای سرویس دائمی با داده‌های پایدار، بعداً باید دیتابیس مثل PostgreSQL اضافه شود.
+App/package id requested by the project:
+`com.nebula.chess`

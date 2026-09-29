@@ -3,7 +3,7 @@
  const $=id=>document.getElementById(id);
  const accountPanel=$('accountPanel'),rankPanel=$('rankPanel');
  const account={token:localStorage.getItem('tomtom_token')||'',username:localStorage.getItem('tomtom_username')||''};
- const api=path=>`${location.origin}${path}`;
+ const api=path=>`${(typeof serverBase==='function'?serverBase():'https://tomtom-chess.onrender.com')}${path}`;
  function authUser(){return account.token&&account.username?{username:account.username,token:account.token}:null}
  function setAuthMessage(t){$('authMessage').textContent=t}
  function applyUser(u){
@@ -28,11 +28,11 @@
  }
  // Add identity to room creation/join payloads by wrapping the socket send path is not necessary for gameplay,
  // but the server stores the display name already. Matchmaking uses the current profile directly.
- $('loginBtn').addEventListener('click',()=>{accountPanel.classList.add('show');accountPanel.setAttribute('aria-hidden','false')});
- $('closeAccount').addEventListener('click',()=>{accountPanel.classList.remove('show');accountPanel.setAttribute('aria-hidden','true')});
+ $('loginBtn').addEventListener('click',()=>{ if(typeof openHomePanelNav==='function') { openHomePanelNav(accountPanel); } else { accountPanel.classList.add('show');accountPanel.setAttribute('aria-hidden','false'); } });
+ $('closeAccount').addEventListener('click',()=>{ if(typeof closeCurrentPanel==='function') closeCurrentPanel(); else { accountPanel.classList.remove('show');accountPanel.setAttribute('aria-hidden','true'); } });
  $('registerBtn').addEventListener('click',register);$('loginBtn2').addEventListener('click',login);$('logoutBtn').addEventListener('click',logout);
- $('rankBtn').addEventListener('click',()=>{rankPanel.classList.add('show');rankPanel.setAttribute('aria-hidden','false');leaderboard();savedGames()});
- $('closeRank').addEventListener('click',()=>{rankPanel.classList.remove('show');rankPanel.setAttribute('aria-hidden','true')});$('refreshRank').addEventListener('click',()=>{leaderboard();savedGames()});$('matchmakeBtn').addEventListener('click',matchmake);
+ $('rankBtn').addEventListener('click',()=>{ if(typeof openHomePanelNav==='function') openHomePanelNav(rankPanel); else { rankPanel.classList.add('show');rankPanel.setAttribute('aria-hidden','false'); } leaderboard();savedGames() });
+ $('closeRank').addEventListener('click',()=>{ if(typeof closeCurrentPanel==='function') closeCurrentPanel(); else { rankPanel.classList.remove('show');rankPanel.setAttribute('aria-hidden','true'); } });$('refreshRank').addEventListener('click',()=>{leaderboard();savedGames()});$('matchmakeBtn').addEventListener('click',matchmake);
  if(account.token&&account.username){request('/api/leaderboard').then(()=>request('/api/games?username='+encodeURIComponent(account.username)+'&token='+encodeURIComponent(account.token))).catch(()=>{})}
  window.tomtomAuth=authUser;
 })();

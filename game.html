@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+  <meta name="theme-color" content="#080d18">
+  <title>TOMTOM CHESS • PRO</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <audio id="tomtomPiano" preload="auto" loop playsinline src="tomtom_piano.mp3"></audio>
+  <script>window.tomtomPiano=document.getElementById("tomtomPiano");</script>
+  <div class="tomtom-bg-layer" aria-hidden="true"><div class="nebula-stars"></div><canvas id="starfield" class="starfield"></canvas></div>
+  <div class="splash" id="splash">
+    <div class="splash-logo">♛</div>
+    <div class="splash-title">TOMTOM CHESS</div>
+    <div class="splash-pro">ARENA</div>
+    <div class="loader"><span></span></div>
+  </div>
+  <!-- Emergency splash fallback: the loader can never block the app if another script fails. -->
+  <script>(function(){
+    var splash=document.getElementById("splash"), img=new Image(), done=false;
+    function hide(){if(done||!splash)return;done=true;splash.classList.add("hide");setTimeout(function(){if(splash.parentNode)splash.remove();},220);}
+    img.onload=function(){setTimeout(hide,650)}; img.onerror=function(){setTimeout(hide,900)}; img.src="tomtom_bg_home.jpg";
+    setTimeout(hide,1800);
+  })();</script>
+
+  <main class="home-screen" id="homeScreen">
+    <header class="home-topbar">
+      <div class="home-brand"><span>♛</span><div><b>TOMTOM CHESS</b><small>THE ROYAL ARENA</small></div></div>
+      <button id="homeSettingsBtn" class="home-icon" aria-label="تنظیمات">⚙</button>
+    </header>
+
+    <section class="home-hero">
+      <div class="home-emblem" aria-label="TOMTOM CHESS"><span>♞</span></div>
+      <div class="home-kicker">WELCOME TO TOMTOM</div>
+      <h1>نبردت را <span>شروع کن.</span></h1>
+      <p>یک صفحه اصلی ساده و حرفه‌ای؛ حالت بازی را انتخاب کن و وارد نبرد شو.</p>
+    </section>
+
+    <section class="home-actions">
+      <button id="offlineBtn" class="home-card home-card-main">
+        <span class="home-card-icon">♟</span><span><b>بازی آفلاین</b><small>بازی با کامپیوتر یا دو نفره</small></span><em>←</em>
+      </button>
+      <button id="homeOnlineBtn" class="home-card home-card-online">
+        <span class="home-card-icon">⚔️</span><span><b>TOMTOM ARENA</b><small>بازی آنلاین با حریف واقعی</small></span><em>←</em>
+      </button>
+    </section>
+
+    <section class="home-grid">
+      <button id="homeProfileBtn" class="home-tile"><strong>♙</strong><b>پروفایل</b><small>بازیکن و آمار</small></button>
+      <button id="homeRankBtn" class="home-tile"><strong>🏆</strong><b>رنکینگ</b><small>جدول آنلاین</small></button>
+      <button id="homeSettingsTile" class="home-tile"><strong>⚙</strong><b>تنظیمات</b><small>صدا و ظاهر</small></button>
+    </section>
+
+    <section class="home-status">
+      <div><span class="home-status-dot"></span><b>آماده بازی</b><small>TOMTOM CHESS</small></div>
+      <div class="home-rating"><b id="homeRating">1200</b><small>RATING</small></div>
+    </section>
+    <div class="home-footer">TOMTOM CHESS • آرام بازی کن، دقیق فکر کن.</div>
+  </main>
+
+  <main class="app" id="gameScreen">
+    <header class="topbar">
+      <button id="backHomeBtn" class="icon-btn home-back" aria-label="بازگشت به صفحه اصلی">→</button>
+      <div>
+        <div class="brand"><span class="brand-crown">♛</span> TOMTOM <b>CHESS</b></div>
+        <div class="brand-sub">PRO EDITION</div>
+      </div>
+      <button id="settingsBtn" class="icon-btn" aria-label="تنظیمات">⚙</button>
+    </header>
+
+    <section class="hero">
+      <div class="hero-kicker">MASTER THE BOARD</div>
+      <h1>آرام بازی کن، <span>دقیق فکر کن.</span></h1>
+      <p>شطرنج مدرن با حرکت نرم، ساعت حرفه‌ای و کنترل لمسی.</p>
+    </section>
+
+    <section class="toolbar">
+      <button id="newGame" class="primary-btn">♟ بازی جدید</button>
+      <select id="mode" aria-label="حالت بازی">
+        <option value="human">دو نفره</option>
+        <option value="computer">مقابل کامپیوتر</option>
+      </select>
+      <button id="sound" class="icon-btn" title="صدا">🔇</button>
+      <button id="profileBtn" class="icon-btn" title="پروفایل">♙</button>
+      <button id="onlineBtn" class="icon-btn arena-btn" title="TOMTOM ARENA">⚔️</button>
+      <button id="loginBtn" class="icon-btn" title="حساب کاربری">◉</button>
+      <button id="rankBtn" class="icon-btn" title="رنکینگ">🏆</button>
+    </section>
+
+    <section class="game-layout">
+      <div class="board-stage">
+        <div class="board-shell">
+          <div class="board-glow"></div>
+          <div class="board" id="board" aria-label="صفحه شطرنج"></div>
+          <div class="drag-ghost" id="dragGhost" aria-hidden="true"></div>
+        </div>
+      </div>
+      <aside class="game-side-panel">
+    <section class="players">
+      <div class="player-card active" id="whitePlayer">
+        <div class="avatar white-avatar">♔</div>
+        <div class="player-meta"><b>سفید</b><small>PLAYER 1</small></div>
+        <div class="clock" id="whiteClock">10:00</div>
+      </div>
+      <div class="vs">VS</div>
+      <div class="player-card" id="blackPlayer">
+        <div class="avatar black-avatar">♚</div>
+        <div class="player-meta"><b>سیاه</b><small id="blackLabel">PLAYER 2</small></div>
+        <div class="clock" id="blackClock">10:00</div>
+      </div>
+    </section>
+
+    <div class="game-status">
+      <div class="turn-pill" id="side">نوبت سفید</div>
+      <div class="status" id="status">یک مهره را انتخاب کنید.</div>
+    </div>
+
+        <div class="side-card">
+          <div class="side-card-head"><b>حرکت‌ها</b><span id="moveCount">0</span></div>
+          <div class="move-list" id="moveList"><div class="empty-moves">هنوز حرکتی انجام نشده</div></div>
+        </div>
+        <div class="side-card chat-card">
+          <div class="side-card-head"><b>💬 چت بازی</b><span id="chatState">آماده</span></div>
+          <div class="chat-messages" id="chatMessages"><div class="chat-empty">برای شروع گفتگو پیام بفرستید.</div></div>
+          <form class="chat-form" id="chatForm">
+            <input id="chatInput" class="chat-input" maxlength="180" autocomplete="off" placeholder="پیام شما…">
+            <button class="chat-send" type="submit">➤</button>
+          </form>
+        </div>
+        <div class="side-card compact-card">
+          <div class="side-card-head"><b>وضعیت بازی</b><span class="live-badge">LIVE</span></div>
+          <div class="game-mini-stats"><div><b id="whiteMoveCount">0</b><small>سفید</small></div><div><b id="blackMoveCount">0</b><small>سیاه</small></div></div>
+        </div>
+        <section class="bottom-tools" aria-label="کنترل‌های بازی">
+          <button id="undoBtn" class="tool-btn">↶ <span>برگشت</span></button>
+          <button id="flipBtn" class="tool-btn">⇅ <span>چرخش صفحه</span></button>
+          <button id="pauseBtn" class="tool-btn">Ⅱ <span>توقف</span></button>
+        </section>
+      </aside>
+    </section>
+
+    <section class="profile-strip">
+      <div class="profile-avatar" id="profileAvatar">♞</div>
+      <div class="profile-info">
+        <b id="profileName">TOMTOM PLAYER</b>
+        <small>LEVEL <span id="level">1</span> • XP <span id="xp">0</span>/100</small>
+      </div>
+      <div class="rating-box"><b id="rating">1200</b><small>RATING</small></div>
+    </section>
+    <div class="footer" id="footer">TOMTOM CHESS PRO • صدا خاموش است.</div>
+  </main>
+
+  <div class="offline-mode-modal" id="offlineModeModal" aria-hidden="true">
+    <div class="offline-mode-card">
+      <div class="modal-kicker">OFFLINE MATCH</div>
+      <h2>نوع بازی را انتخاب کنید</h2>
+      <div class="offline-mode-options">
+        <button id="localTwoPlayerBtn" class="offline-mode-option"><span>👥</span><b>دو نفره</b><small>دو بازیکن روی همین گوشی</small></button>
+        <button id="aiMatchBtn" class="offline-mode-option"><span>🤖</span><b>مقابل هوش مصنوعی</b><small>انتخاب سطح: ضعیف تا پادشاه</small></button>
+      </div>
+      <button id="cancelOfflineMode" class="tool-btn">انصراف</button>
+    </div>
+  </div>
+
+  <div class="modal" id="modal" aria-hidden="true">
+    <div class="modal-card">
+      <div class="result-icon">♛</div>
+      <div class="modal-kicker">GAME OVER</div>
+      <h2 id="modalTitle">کیش‌ومات</h2>
+      <p id="modalText"></p>
+      <div class="result-actions">
+        <button id="again" class="primary-btn">بازی جدید</button>
+        <button id="closeModal" class="secondary-btn">بستن</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="settings" id="profilePanel" aria-hidden="true">
+    <div class="settings-card">
+      <div class="settings-head"><h2>پروفایل</h2><button id="closeProfile" class="icon-btn">×</button></div>
+      <label>نام بازیکن<input id="playerName" class="text-input" maxlength="18" value="TOMTOM PLAYER"></label>
+      <label>آواتار
+        <select id="avatarSelect"><option value="♞">♞ اسب</option><option value="♟">♟ سرباز</option><option value="♛">♛ وزیر</option><option value="♔">♔ شاه</option></select>
+      </label>
+      <div class="stats-grid"><div><b id="wins">0</b><small>برد</small></div><div><b id="losses">0</b><small>باخت</small></div><div><b id="draws">0</b><small>مساوی</small></div></div>
+      <button id="saveProfile" class="primary-btn">ذخیره پروفایل</button>
+    </div>
+  </div>
+
+  <div class="settings" id="onlinePanel" aria-hidden="true">
+    <div class="settings-card">
+      <div class="settings-head"><h2>⚔️ TOMTOM ARENA</h2><button id="closeOnline" class="icon-btn">×</button></div>
+      <div class="online-status"><span class="dot" id="onlineDot"></span><b id="onlineState">آماده اتصال</b></div>
+      <div class="arena-banner"><span class="arena-shield">♞</span><div><b>TOMTOM ARENA</b><small>بازی رقابتی آنلاین • اتاق خصوصی • حریف تصادفی</small></div></div><p class="panel-note">با ساخت اتاق، یک کد واقعی می‌گیری. بازیکن دوم همان کد را وارد می‌کند و حرکت‌ها از طریق WebSocket بین دو دستگاه همگام می‌شوند.</p>
+      <label>آدرس سرور اینترنتی<input id="serverUrlInput" class="text-input" placeholder="https://YOUR-SERVER.onrender.com"></label>
+      <div class="online-actions"><button id="saveServerUrl" class="secondary-btn">ذخیره سرور</button><button id="testServer" class="secondary-btn">تست اتصال</button></div>
+      <label>کد اتاق<input id="roomCode" class="text-input" maxlength="8" value="TOM123"></label>
+      <div class="online-actions"><button id="copyRoom" class="secondary-btn">کپی کد</button><button id="hostRoom" class="primary-btn">ساخت اتاق</button><button id="joinRoom" class="secondary-btn">ورود به اتاق</button></div>
+      <div id="roomMessage" class="room-message"></div>
+      <button id="matchmakeBtn" class="primary-btn" style="width:100%;margin-top:8px">⚡ بازی سریع با حریف تصادفی</button>
+    </div>
+  </div>
+
+  <div class="settings" id="accountPanel" aria-hidden="true">
+    <div class="settings-card">
+      <div class="settings-head"><h2>حساب TOMTOM</h2><button id="closeAccount" class="icon-btn">×</button></div>
+      <div class="online-status"><span class="dot" id="authDot"></span><b id="authState">مهمان</b></div>
+      <label>نام نمایشی<input id="authName" class="text-input" maxlength="24" value="TOMTOM PLAYER"></label>
+      <label>نام کاربری<input id="authUsername" class="text-input" maxlength="20" placeholder="مثلاً tomtom_01"></label>
+      <label>رمز عبور<input id="authPassword" class="text-input" type="password" minlength="4" placeholder="حداقل ۴ کاراکتر"></label>
+      <div class="online-actions"><button id="registerBtn" class="secondary-btn">ثبت‌نام</button><button id="loginBtn2" class="primary-btn">ورود</button></div>
+      <button id="logoutBtn" class="secondary-btn" style="width:100%;margin-top:8px">خروج از حساب</button>
+      <div id="authMessage" class="room-message"></div>
+    </div>
+  </div>
+
+  <div class="settings" id="rankPanel" aria-hidden="true">
+    <div class="settings-card">
+      <div class="settings-head"><h2>🏆 رنکینگ آنلاین</h2><button id="closeRank" class="icon-btn">×</button></div>
+      <div id="leaderboard" class="leaderboard"><div class="room-message">در حال دریافت رنکینگ…</div></div>
+      <button id="refreshRank" class="secondary-btn" style="width:100%;margin-top:10px">به‌روزرسانی</button>
+      <hr class="panel-sep">
+      <h3>بازی‌های ذخیره‌شده</h3>
+      <div id="savedGames" class="saved-games"><div class="room-message">برای دیدن بازی‌ها وارد حساب شوید.</div></div>
+    </div>
+  </div>
+
+  <div class="settings" id="settings" aria-hidden="true">
+    <div class="settings-card">
+      <div class="settings-head">
+        <h2>تنظیمات</h2>
+        <button id="closeSettings" class="icon-btn">×</button>
+      </div>
+      <label>زمان بازی
+        <select id="timeControl">
+          <option value="60">1 دقیقه</option>
+          <option value="300">5 دقیقه</option>
+          <option value="600" selected>10 دقیقه</option>
+          <option value="900">15 دقیقه</option>
+        </select>
+      </label>
+      <label>ست مهره
+        <select id="pieceSet"><option value="classic">کلاسیک</option><option value="mono">مینیمال</option><option value="royal">رویال</option></select>
+      </label>
+      <label>تم صفحه
+        <select id="theme">
+          <option value="classic" selected>کلاسیک</option>
+          <option value="midnight">نیمه‌شب</option>
+          <option value="emerald">زمردی</option>
+        </select>
+      </label>
+      <label>سطح هوش مصنوعی
+        <select id="aiLevel">
+          <option value="weak">ضعیف</option>
+          <option value="medium" selected>متوسط</option>
+          <option value="strong">قوی</option>
+          <option value="very-strong">خیلی قوی</option>
+          <option value="king">پادشاه</option>
+        </select>
+      </label>
+      <div class="ai-level-note" id="aiLevelNote">سطح متوسط: بازی متعادل و سریع.</div>
+      <label class="switch-row">حرکت خودکار کامپیوتر <input id="smartMode" type="checkbox" checked><span></span></label>
+      <label class="switch-row">🎵 موسیقی پیانو <input id="musicEnabled" type="checkbox" checked><span></span></label>
+      <label class="volume-row">🔊 صدای بازی <div class="volume-control"><input id="masterVolume" type="range" min="0" max="100" value="70"><output id="masterVolumeValue">70٪</output></div></label>
+      <div class="sound-note">صدای انتخاب مهره، حرکت، زدن مهره و رویدادهای بازی جداگانه تنظیم شده‌اند.</div>
+      <button id="saveSettings" class="primary-btn">ذخیره و شروع مجدد</button>
+    </div>
+  </div>
+
+  <div class="pause-overlay" id="pauseOverlay">
+    <div class="pause-card">
+      <div>Ⅱ</div><h2>بازی متوقف است</h2>
+      <button id="resumeBtn" class="primary-btn">ادامه بازی</button>
+    </div>
+  </div>
+
+  <script>
+(function(){
+  const c=document.getElementById('starfield'); if(!c) return;
+  const ctx=c.getContext('2d');
+  const DPR=Math.min(window.devicePixelRatio||1,1.5);
+  const stars=[]; const COUNT=window.innerWidth<600?120:180;
+  let w=0,h=0,last=performance.now();
+  function rnd(i){ const x=Math.sin(i*999.91)*43758.5453; return x-Math.floor(x); }
+  function resize(){ w=innerWidth; h=innerHeight; c.width=Math.floor(w*DPR); c.height=Math.floor(h*DPR); c.style.width=w+'px'; c.style.height=h+'px'; ctx.setTransform(DPR,0,0,DPR,0,0); }
+  function seed(){ stars.length=0; for(let i=0;i<COUNT;i++){ stars.push({x:rnd(i)*w,y:rnd(i+COUNT)*h,r:.35+rnd(i+2*COUNT)*1.55,a:.25+rnd(i+3*COUNT)*.65,s:.08+rnd(i+4*COUNT)*.34,p:rnd(i+5*COUNT)*Math.PI*2}); } }
+  function draw(now){
+    const dt=Math.min(40,now-last); last=now;
+    const gameMode=document.body.classList.contains('game-mode');
+    const hidden=document.hidden;
+    if(gameMode || hidden){
+      ctx.clearRect(0,0,w,h);
+      requestAnimationFrame(draw);
+      return;
+    }
+    ctx.clearRect(0,0,w,h);
+    for(const st of stars){
+      // Slow one-way drift; each star wraps at the edge so there is no global reset/return.
+      st.x += st.s * dt * 0.020;
+      st.y += st.s * dt * 0.007;
+      if(st.x > w + 8) st.x = -8;
+      if(st.y > h + 8) st.y = -8;
+      const pulse=.5+.5*Math.sin(now*.0012*st.s*3+st.p);
+      const a=Math.min(1,st.a*(.58+.62*pulse));
+      ctx.globalAlpha=a; ctx.beginPath(); ctx.arc(st.x,st.y,st.r*(.72+.35*pulse),0,Math.PI*2); ctx.fillStyle='#ffffff'; ctx.fill();
+      if(st.r>1.35 && pulse>.78){ ctx.globalAlpha=a*.42; ctx.beginPath(); ctx.moveTo(st.x-st.r*3,st.y); ctx.lineTo(st.x+st.r*3,st.y); ctx.moveTo(st.x,st.y-st.r*3); ctx.lineTo(st.x,st.y+st.r*3); ctx.strokeStyle='#9ec7ff'; ctx.lineWidth=.45; ctx.stroke(); }
+    }
+    ctx.globalAlpha=1; requestAnimationFrame(draw);
+  }
+  addEventListener('resize',()=>{resize();seed()},{passive:true});
+  resize(); seed(); requestAnimationFrame(draw);
+})();
+</script>
+<script>
+(function(){
+  var layer=document.querySelector('.tomtom-bg-layer');
+  if(!layer) return;
+  function readyVisuals(){
+    if(document.hidden || document.body.classList.contains('game-mode')) return;
+    layer.classList.add('visuals-ready');
+  }
+  if('requestIdleCallback' in window) requestIdleCallback(readyVisuals,{timeout:4500});
+  else setTimeout(readyVisuals,4500);
+})();
+</script>
+<script src="game.js"></script>
+  <script src="online-plus.js"></script>
+</body>
+</html>

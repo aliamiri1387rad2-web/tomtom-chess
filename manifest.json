@@ -1,0 +1,11 @@
+{
+  "name": "TOMTOM CHESS",
+  "short_name": "TOMTOM CHESS",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#080d18",
+  "theme_color": "#080d18",
+  "orientation": "any",
+  "lang": "fa",
+  "dir": "rtl"
+}

@@ -13,10 +13,10 @@ button,select{font:inherit}
 button{cursor:pointer}
 button:disabled{opacity:.45;cursor:not-allowed}
 .app{width:min(100%,900px);padding:16px 14px 30px;position:relative}
-.splash{position:fixed;inset:0;background:#080d18;z-index:100;
+.splash{position:fixed;inset:0;background:#080d18;z-index:100;pointer-events:auto;
 display:flex;flex-direction:column;align-items:center;justify-content:center;
 transition:opacity .5s ease,visibility .5s}
-.splash.hide{opacity:0;visibility:hidden}
+.splash.hide{opacity:0;visibility:hidden;pointer-events:none}
 .splash-logo{font-size:88px;color:var(--gold);text-shadow:0 15px 35px #000;animation:logoFloat 1.4s ease-in-out infinite}
 .splash-title{font-weight:900;font-size:clamp(28px,8vw,54px);letter-spacing:3px}
 .splash-pro{color:var(--accent);font-size:14px;letter-spacing:8px;font-weight:900;margin-top:5px}
@@ -63,7 +63,7 @@ display:flex;align-items:center;gap:9px;min-width:0;transition:.2s}
 .board-shell{position:relative;width:100%;max-width:780px;margin:auto;padding:9px}
 .board-glow{position:absolute;inset:4%;background:#6f60db22;filter:blur(42px);border-radius:50%;z-index:0}
 .board{position:relative;z-index:1;width:100%;aspect-ratio:1;border-radius:22px;overflow:hidden;
-display:grid;grid-template-columns:repeat(8,1fr);box-shadow:0 28px 65px #000b,0 0 0 1px #ffffff12;
+display:grid;grid-template-columns:repeat(8,1fr);grid-template-rows:repeat(8,1fr);box-shadow:0 28px 65px #000b,0 0 0 1px #ffffff12;
 touch-action:none;transform:translateZ(0)}
 .square{position:relative;display:flex;align-items:center;justify-content:center;cursor:pointer;
 user-select:none;touch-action:none;overflow:hidden}
@@ -202,3 +202,576 @@ html,body{overflow-x:hidden}
   .board-shell{width:calc(100vw - 20px);max-width:680px;aspect-ratio:1/1;padding:4px}
   .board{width:100%;height:100%}
 }
+
+/* V11 mobile drag stability + arena polish */
+.square{touch-action:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+.square.pressing{filter:brightness(1.08)}
+.square.drag-source{opacity:.38}
+.drag-ghost{will-change:left,top;transform:translateZ(0) scale(1.05);transition:none}
+.arena-btn{position:relative}
+.arena-btn::after{content:'ARENA';position:absolute;right:4px;bottom:2px;font-size:6px;letter-spacing:1px;color:var(--gold);opacity:.8}
+.arena-banner{display:flex;align-items:center;gap:12px;padding:12px;border:1px solid #e7c66a33;border-radius:16px;background:linear-gradient(135deg,#18263e,#211a3b);margin-bottom:12px}
+.arena-shield{width:48px;height:48px;border-radius:14px;display:grid;place-items:center;background:linear-gradient(145deg,#e7c66a,#8b7cff);color:#101827;font-size:30px;box-shadow:0 8px 24px #0005}
+.arena-banner b{display:block;color:#f3d77d;letter-spacing:1.5px}.arena-banner small{display:block;color:#aeb9c9;margin-top:4px;font-size:10px}
+
+/* V12 mobile touch lock: the document must not scroll, rubber-band, zoom, or visually split while dragging a chess piece. */
+html{overscroll-behavior:none;-webkit-text-size-adjust:100%;}
+body{overscroll-behavior:none;}
+.board-shell,.board{touch-action:none;overscroll-behavior:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;}
+.chess-dragging,.chess-dragging body{overflow:hidden!important;overscroll-behavior:none!important;}
+.chess-dragging .app{touch-action:none;}
+.square{touch-action:none!important;-webkit-user-select:none!important;user-select:none!important;-webkit-tap-highlight-color:transparent;}
+.drag-ghost{width:var(--drag-size,72px);height:var(--drag-size,72px);font-size:var(--drag-font,64px);}
+
+/* V13 HOME SCREEN — the chess match is a separate screen, not dumped into Home. */
+body.home-mode{overflow:hidden}
+.home-screen{width:min(100%,900px);min-height:100vh;padding:18px 14px 28px;display:flex;flex-direction:column;gap:14px;position:relative}
+.home-screen::before{content:"";position:fixed;inset:auto 0 0;height:48vh;pointer-events:none;background:radial-gradient(circle at 50% 100%,#6e5fe522,transparent 62%);z-index:-1}
+.home-topbar{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.home-brand{display:flex;align-items:center;gap:10px}.home-brand>span{font-size:34px;color:var(--gold);text-shadow:0 8px 24px #000}.home-brand div{display:flex;flex-direction:column}.home-brand b{font-size:19px;letter-spacing:1.5px}.home-brand small{font-size:8px;color:var(--muted);letter-spacing:4px;margin-top:3px}
+.home-icon{width:50px;height:50px;border:1px solid #ffffff12;background:#142137;color:#fff;border-radius:16px;font-size:21px;box-shadow:0 10px 25px #0004}
+.home-hero{position:relative;text-align:center;padding:24px 12px 10px;overflow:hidden}
+.home-emblem{width:112px;height:112px;margin:0 auto 12px;border-radius:30px;display:grid;place-items:center;position:relative;background:linear-gradient(145deg,#182943,#0b1424);border:1px solid #e7c66a40;box-shadow:0 20px 55px #0008,0 0 42px #8878f41a}
+.home-emblem::before{content:"";position:absolute;inset:11px;border-radius:22px;border:1px solid #ffffff0b}
+.home-emblem span{font-size:76px;line-height:1;color:#f4f1e8;text-shadow:0 7px 14px #000c;transform:translateY(-2px)}
+.home-kicker{font-size:9px;letter-spacing:5px;color:var(--accent);font-weight:900}.home-hero h1{font-size:clamp(34px,8vw,52px);margin:7px 0}.home-hero h1 span{color:var(--gold)}.home-hero p{margin:0 auto;color:var(--muted);font-size:13px;max-width:520px;line-height:1.9}
+.home-actions{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:4px}
+.home-card{min-height:118px;border:1px solid #ffffff0d;border-radius:22px;color:#fff;text-align:right;padding:17px;display:flex;align-items:center;gap:13px;box-shadow:0 18px 42px #0005;transition:.2s;position:relative;overflow:hidden}
+.home-card::after{content:"";position:absolute;width:130px;height:130px;border-radius:50%;left:-45px;bottom:-70px;background:#ffffff08}.home-card:hover{transform:translateY(-2px);filter:brightness(1.05)}
+.home-card-main{background:linear-gradient(135deg,#202f49,#151f32)}.home-card-online{background:linear-gradient(135deg,#2b2350,#171c38);border-color:#8878f433}
+.home-card-icon{width:56px;height:56px;border-radius:17px;display:grid;place-items:center;flex:none;font-size:31px;background:#ffffff0b}.home-card-main .home-card-icon{color:var(--gold)}.home-card-online .home-card-icon{background:#e7c66a18;color:#e7c66a}
+.home-card span:nth-child(2){display:flex;flex-direction:column;gap:5px;min-width:0}.home-card b{font-size:16px}.home-card small{color:#aeb9c9;font-size:10px;line-height:1.6}.home-card em{font-style:normal;margin-right:auto;color:var(--gold);font-size:22px}
+.home-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.home-tile{min-height:94px;border:1px solid #ffffff09;background:#101c30;color:#fff;border-radius:18px;padding:13px;display:flex;flex-direction:column;align-items:flex-start;gap:4px;text-align:right;box-shadow:0 12px 30px #0003}.home-tile strong{font-size:23px;color:var(--gold)}.home-tile b{font-size:12px}.home-tile small{font-size:9px;color:#7f8da3}
+.home-status{margin-top:auto;display:flex;align-items:center;justify-content:space-between;background:#101c30;border:1px solid #ffffff09;border-radius:18px;padding:12px 14px;box-shadow:0 12px 30px #0003}.home-status>div:first-child{display:flex;align-items:center;gap:8px}.home-status-dot{width:9px;height:9px;background:#49df9b;border-radius:50%;box-shadow:0 0 14px #49df9b}.home-status b{font-size:11px}.home-status small{display:block;color:#6f7d92;font-size:8px;margin-right:3px}.home-rating{text-align:center}.home-rating b{display:block;color:var(--gold);font-size:18px}.home-rating small{letter-spacing:1px}
+.home-footer{text-align:center;color:#59677e;font-size:9px;margin-top:2px}
+#gameScreen{display:none}.home-mode #gameScreen{display:none}.home-mode #homeScreen{display:flex}.game-mode #homeScreen{display:none}.game-mode #gameScreen{display:block}.home-back{font-size:23px;flex:none}
+@media(max-width:650px){.home-emblem span{font-size:64px}.home-screen{padding:12px 9px 22px}.home-hero{padding-top:20px}.home-emblem{width:96px;height:96px;border-radius:29px}.home-emblem span{font-size:64px}.home-emblem i{display:none}.home-actions{grid-template-columns:1fr}.home-card{min-height:92px}.home-grid{gap:7px}.home-tile{min-height:86px;padding:10px}.home-tile strong{font-size:21px}.home-brand b{font-size:17px}.home-brand small{font-size:7px;letter-spacing:3px}}
+@media(max-width:390px){.home-hero h1{font-size:31px}.home-hero p{font-size:11px}.home-card{padding:13px}.home-card-icon{width:48px;height:48px;font-size:27px}.home-card b{font-size:14px}}
+
+/* V14 OFFLINE REDESIGN — mobile-first, scroll-safe, stable board */
+body.game-mode{display:block;overflow-x:hidden;overflow-y:auto;min-height:100dvh;height:auto}
+.game-mode #gameScreen{display:block;min-height:100dvh;height:auto;overflow:visible}
+.game-mode .app{width:min(1180px,100%);margin:0 auto;min-height:100dvh;height:auto;padding:10px 10px 34px}
+.game-mode .game-layout{align-items:start}
+.game-mode .board-stage{min-height:0;overflow:visible}
+.game-mode .board-shell{width:min(780px,100%);aspect-ratio:1/1;height:auto;max-height:none;overflow:visible}
+.game-mode .board{touch-action:none;overscroll-behavior:none}
+.game-mode .square{touch-action:none!important}
+.game-mode .board-stage,.game-mode .board-shell,.game-mode .board{flex-shrink:0}
+.game-mode .square.move::after{width:24%;height:24%;background:#1c2a3fdd;box-shadow:0 0 0 4px #ffffff22,0 0 14px #0007}
+.game-mode .square.capture::after{border-color:#e7c66add;box-shadow:0 0 16px #e7c66a44}
+.game-mode .square.selected{box-shadow:inset 0 0 0 4px var(--gold),inset 0 0 32px #e7c66a44}
+.game-mode .piece{pointer-events:none}
+@media(max-width:760px){
+  body.game-mode{overflow-y:auto!important;-webkit-overflow-scrolling:touch}
+  .game-mode .app{padding:8px 8px 30px}
+  .game-mode .topbar{position:relative;z-index:5;margin-bottom:5px}
+  .game-mode .hero{padding:8px 4px 8px}
+  .game-mode .game-layout{display:flex;flex-direction:column;gap:8px;width:100%}
+  .game-mode .board-stage{order:1;width:100%;display:flex;justify-content:center;overflow:visible}
+  .game-mode .board-shell{order:1;width:min(100%,calc(100vw - 16px));max-width:680px;padding:3px;margin:0 auto}
+  .game-mode .board{width:100%;height:auto;aspect-ratio:1/1;border-radius:14px}
+  .game-mode .game-side-panel{order:2;width:100%;display:flex;flex-direction:column;gap:8px;margin-top:2px}
+  .game-mode .side-card{width:100%}
+  .game-mode .move-list{max-height:160px;height:auto}
+  .game-mode .chat-card{min-height:0}
+  .game-mode .chat-messages{height:120px}
+  .game-mode .players{margin-bottom:5px}
+  .game-mode .game-status{margin:4px 0 7px}
+}
+@media(max-width:480px){
+  .game-mode .app{padding-left:6px;padding-right:6px}
+  .game-mode .board-shell{width:calc(100vw - 12px);padding:2px}
+  .game-mode .board{border-radius:12px}
+  .game-mode .piece{font-size:clamp(32px,10.5vw,62px)}
+  .game-mode .square.move::after{width:20%;height:20%}
+  .game-mode .square.capture::after{inset:4px;border-width:3px}
+}
+
+/* V20 CHESS ARENA — board-first mobile layout, inspired by modern chess apps */
+.game-mode .hero{display:none}
+.game-mode .toolbar{display:none}
+.game-mode .profile-strip{display:none}
+.game-mode .footer{display:none}
+.game-mode .topbar{background:linear-gradient(180deg,#0d1728,#0a1220);border:1px solid #ffffff0a;border-radius:18px;padding:8px 10px;margin-bottom:8px;box-shadow:0 10px 28px #0005}
+.game-mode .brand{font-size:15px}
+.game-mode .brand-sub{font-size:7px}
+.game-mode .game-layout{margin-top:0}
+.game-mode .game-side-panel .bottom-tools{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin:0}
+.game-mode .tool-btn{min-height:44px;border:1px solid #ffffff0c;background:linear-gradient(180deg,#17263d,#101b2d);color:#dbe3ee;border-radius:13px;font-weight:800;box-shadow:0 8px 18px #0003}
+.game-mode .tool-btn:active{transform:translateY(1px);filter:brightness(1.12)}
+.game-mode .game-status{background:#0c1627;border:1px solid #ffffff08;border-radius:14px;padding:7px 9px;box-shadow:0 8px 22px #0003}
+.game-mode .turn-pill{font-size:10px;padding:6px 9px}
+.game-mode .status{font-size:10px}
+.game-mode .players{margin:0 0 7px;gap:7px}
+.game-mode .player-card{background:linear-gradient(145deg,#132139,#0e1828);border:1px solid #ffffff09;border-radius:15px;box-shadow:0 8px 22px #0004}
+.game-mode .player-card.active{border-color:#e7c66a55;box-shadow:0 0 0 1px #e7c66a22,0 10px 24px #0005}
+.game-mode .board-shell{padding:4px;background:linear-gradient(145deg,#1c2940,#0c1524);border-radius:20px;box-shadow:0 18px 45px #0007,0 0 35px #6d5ce733}
+.game-mode .board{border-radius:15px;box-shadow:0 0 0 1px #ffffff14}
+.game-mode .game-side-panel{gap:9px}
+.game-mode .side-card{border-radius:15px;padding:11px}
+.game-mode .move-list{max-height:230px}
+
+/* Portrait: board is the hero, controls stay immediately below it. */
+@media (orientation:portrait){
+  .game-mode .app{max-width:720px}
+  .game-mode .board-stage{margin-top:0}
+  .game-mode .game-layout{gap:9px}
+  .game-mode .game-side-panel{margin-top:0}
+  .game-mode .game-side-panel .side-card{display:block}
+  .game-mode .game-side-panel .chat-card{display:none}
+  .game-mode .game-side-panel .compact-card{display:none}
+  .game-mode .game-side-panel .side-card:first-child{order:2}
+  .game-mode .game-side-panel .bottom-tools{order:1}
+  .game-mode .move-list{max-height:130px}
+}
+
+/* Landscape: true split-screen chess table — large board + controls beside it. */
+@media (orientation:landscape) and (max-height:900px){
+  body.game-mode{overflow:hidden;height:100dvh}
+  .game-mode #gameScreen{height:100dvh;min-height:0;overflow:hidden}
+  .game-mode .app{height:100dvh;min-height:0;padding:7px 9px;box-sizing:border-box}
+  .game-mode .topbar{height:46px;margin-bottom:5px;padding:5px 9px}
+  .game-mode .game-layout{height:calc(100dvh - 58px);min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:10px;align-items:stretch}
+  .game-mode .board-stage{height:100%;min-height:0;align-items:center;overflow:hidden}
+  .game-mode .board-shell{width:min(calc(100dvh - 72px),calc(100vw - 340px));height:auto;max-width:none;aspect-ratio:1/1;padding:5px}
+  .game-mode .board{width:100%;height:100%}
+  .game-mode .game-side-panel{height:100%;min-height:0;overflow:hidden;display:flex;flex-direction:column;gap:7px}
+  .game-mode .players{order:1;margin:0;flex:0 0 auto}
+  .game-mode .game-status{order:2;flex:0 0 auto}
+  .game-mode .side-card:first-child{order:3;min-height:0;flex:1}
+  .game-mode .move-list{height:100%;max-height:none;min-height:80px}
+  .game-mode .chat-card{order:4;min-height:0;max-height:145px}
+  .game-mode .chat-messages{height:75px}
+  .game-mode .compact-card{order:5;flex:0 0 auto}
+  .game-mode .game-side-panel .bottom-tools{order:6;flex:0 0 auto}
+  .game-mode .game-side-panel .bottom-tools .tool-btn{min-height:38px;font-size:11px}
+  .game-mode .game-side-panel .bottom-tools .tool-btn span{font-size:10px}
+  .game-mode .game-side-panel{position:relative}
+  .game-mode .board-glow{inset:7%;filter:blur(30px)}
+}
+
+/* Very short landscape phones: prioritize the board and clocks. */
+@media (orientation:landscape) and (max-height:560px){
+  .game-mode .topbar{height:39px}
+  .game-mode .brand-sub{display:none}
+  .game-mode .game-layout{height:calc(100dvh - 48px);grid-template-columns:minmax(0,1fr) 260px}
+  .game-mode .board-shell{width:min(calc(100dvh - 57px),calc(100vw - 300px))}
+  .game-mode .side-card:first-child{display:none}
+  .game-mode .chat-card{display:none}
+  .game-mode .compact-card{display:none}
+  .game-mode .game-side-panel{justify-content:center}
+  .game-mode .game-side-panel .bottom-tools{margin-top:0}
+}
+
+/* Touch feedback without interfering with pointer capture used by the chessboard. */
+@media (hover:none){
+  .game-mode button{touch-action:manipulation}
+  .game-mode .tool-btn,.game-mode .icon-btn{ -webkit-tap-highlight-color:transparent }
+}
+
+/* V21 — reliable two-input chessboard + real phone orientation layouts */
+.game-mode .game-side-panel .players{display:grid;grid-template-columns:1fr 32px 1fr;align-items:center;gap:7px}
+.game-mode .game-side-panel .game-status{display:block}
+.game-mode .game-side-panel .player-card{min-width:0}
+
+/* Portrait: board first, then compact player/status/control area. */
+@media (orientation:portrait){
+  .game-mode .game-layout{display:flex;flex-direction:column;align-items:center;width:100%;gap:8px}
+  .game-mode .board-stage{order:1;width:100%;display:flex;justify-content:center}
+  .game-mode .game-side-panel{order:2;width:100%;display:flex;flex-direction:column;gap:7px}
+  .game-mode .game-side-panel .players{order:1}
+  .game-mode .game-side-panel .game-status{order:2}
+  .game-mode .game-side-panel .side-card:first-of-type{order:3}
+  .game-mode .game-side-panel .chat-card{order:4}
+  .game-mode .game-side-panel .compact-card{order:5}
+  .game-mode .game-side-panel .bottom-tools{order:6}
+  .game-mode .board-shell{width:min(calc(100vw - 12px),680px);max-width:680px}
+}
+
+/* Landscape: everything needed for play fits in one viewport. */
+@media (orientation:landscape){
+  body.game-mode{overflow:hidden;height:100dvh}
+  .game-mode #gameScreen{height:100dvh;min-height:0;overflow:hidden}
+  .game-mode .app{height:100dvh;min-height:0;padding:6px 8px;box-sizing:border-box}
+  .game-mode .topbar{height:42px;margin-bottom:5px;padding:4px 8px}
+  .game-mode .game-layout{height:calc(100dvh - 53px);display:grid;grid-template-columns:minmax(0,1fr) clamp(250px,30vw,320px);gap:9px;align-items:stretch;margin:0}
+  .game-mode .board-stage{height:100%;min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden}
+  .game-mode .board-shell{width:min(calc(100dvh - 64px),calc(100vw - clamp(259px,30vw,329px)));max-width:none;height:auto;aspect-ratio:1/1;padding:4px}
+  .game-mode .board{width:100%;height:100%}
+  .game-mode .game-side-panel{height:100%;min-height:0;overflow:hidden;display:flex;flex-direction:column;gap:6px}
+  .game-mode .game-side-panel .players{order:1;flex:0 0 auto;margin:0}
+  .game-mode .game-side-panel .game-status{order:2;flex:0 0 auto;margin:0}
+  .game-mode .game-side-panel .side-card:first-of-type{order:3;flex:1;min-height:70px;overflow:hidden}
+  .game-mode .game-side-panel .move-list{height:100%;max-height:none;min-height:60px}
+  .game-mode .game-side-panel .chat-card{order:4;max-height:105px;min-height:0}
+  .game-mode .game-side-panel .chat-messages{height:48px}
+  .game-mode .game-side-panel .compact-card{order:5;display:none}
+  .game-mode .game-side-panel .bottom-tools{order:6;flex:0 0 auto}
+  .game-mode .game-side-panel .bottom-tools .tool-btn{min-height:36px;font-size:10px}
+  .game-mode .player-card{padding:6px}
+  .game-mode .avatar{width:34px;height:34px;font-size:23px}
+  .game-mode .clock{font-size:15px}
+  .game-mode .player-meta small{font-size:7px}
+  .game-mode .game-status{padding:5px 7px}
+  .game-mode .turn-pill{padding:5px 7px;font-size:9px}
+  .game-mode .status{font-size:9px}
+}
+
+@media (orientation:landscape) and (max-height:560px){
+  .game-mode .topbar{height:36px}
+  .game-mode .brand-sub{display:none}
+  .game-mode .game-layout{height:calc(100dvh - 43px);grid-template-columns:minmax(0,1fr) 245px}
+  .game-mode .board-shell{width:min(calc(100dvh - 52px),calc(100vw - 254px))}
+  .game-mode .game-side-panel .side-card:first-of-type,.game-mode .game-side-panel .chat-card{display:none}
+  .game-mode .game-side-panel{justify-content:center}
+}
+
+/* Legal destination dots remain visible after selecting a piece, and direct drag never rebuilds the board. */
+.game-mode .square.move::after{content:"";display:block;position:absolute;width:23%;height:23%;border-radius:50%;background:#1b2a40e6;box-shadow:0 0 0 3px #ffffff22,0 0 12px #0008;pointer-events:none;z-index:4}
+.game-mode .square.capture::after{content:"";display:block;position:absolute;inset:5px;border:3px solid #e7c66add;border-radius:50%;box-shadow:0 0 14px #e7c66a44;pointer-events:none;z-index:4}
+.game-mode .square.selected{box-shadow:inset 0 0 0 4px var(--gold),inset 0 0 28px #e7c66a44}
+.game-mode .piece{pointer-events:none}
+
+/* V21 — reliable two-input chessboard + real phone orientation layouts */
+.game-mode .game-side-panel .players{display:grid;grid-template-columns:1fr 32px 1fr;align-items:center;gap:7px}
+.game-mode .game-side-panel .game-status{display:block}
+.game-mode .game-side-panel .player-card{min-width:0}
+
+@media (orientation:portrait){
+  .game-mode .game-layout{display:flex;flex-direction:column;align-items:center;width:100%;gap:8px}
+  .game-mode .board-stage{order:1;width:100%;display:flex;justify-content:center}
+  .game-mode .game-side-panel{order:2;width:100%;display:flex;flex-direction:column;gap:7px}
+  .game-mode .game-side-panel .players{order:1}
+  .game-mode .game-side-panel .game-status{order:2}
+  .game-mode .game-side-panel .side-card:first-of-type{order:3}
+  .game-mode .game-side-panel .chat-card{order:4}
+  .game-mode .game-side-panel .compact-card{order:5}
+  .game-mode .game-side-panel .bottom-tools{order:6}
+  .game-mode .board-shell{width:min(calc(100vw - 12px),680px);max-width:680px}
+}
+
+@media (orientation:landscape){
+  body.game-mode{overflow:hidden;height:100dvh}
+  .game-mode #gameScreen{height:100dvh;min-height:0;overflow:hidden}
+  .game-mode .app{height:100dvh;min-height:0;padding:6px 8px;box-sizing:border-box}
+  .game-mode .topbar{height:42px;margin-bottom:5px;padding:4px 8px}
+  .game-mode .game-layout{height:calc(100dvh - 53px);display:grid;grid-template-columns:minmax(0,1fr) clamp(250px,30vw,320px);gap:9px;align-items:stretch;margin:0}
+  .game-mode .board-stage{height:100%;min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden}
+  .game-mode .board-shell{width:min(calc(100dvh - 64px),calc(100vw - clamp(259px,30vw,329px)));max-width:none;height:auto;aspect-ratio:1/1;padding:4px}
+  .game-mode .board{width:100%;height:100%}
+  .game-mode .game-side-panel{height:100%;min-height:0;overflow:hidden;display:flex;flex-direction:column;gap:6px}
+  .game-mode .game-side-panel .players{order:1;flex:0 0 auto;margin:0}
+  .game-mode .game-side-panel .game-status{order:2;flex:0 0 auto;margin:0}
+  .game-mode .game-side-panel .side-card:first-of-type{order:3;flex:1;min-height:70px;overflow:hidden}
+  .game-mode .game-side-panel .move-list{height:100%;max-height:none;min-height:60px}
+  .game-mode .game-side-panel .chat-card{order:4;max-height:105px;min-height:0}
+  .game-mode .game-side-panel .chat-messages{height:48px}
+  .game-mode .game-side-panel .compact-card{order:5;display:none}
+  .game-mode .game-side-panel .bottom-tools{order:6;flex:0 0 auto}
+  .game-mode .game-side-panel .bottom-tools .tool-btn{min-height:36px;font-size:10px}
+  .game-mode .player-card{padding:6px}
+  .game-mode .avatar{width:34px;height:34px;font-size:23px}
+  .game-mode .clock{font-size:15px}
+  .game-mode .player-meta small{font-size:7px}
+  .game-mode .game-status{padding:5px 7px}
+  .game-mode .turn-pill{padding:5px 7px;font-size:9px}
+  .game-mode .status{font-size:9px}
+}
+
+@media (orientation:landscape) and (max-height:560px){
+  .game-mode .topbar{height:36px}
+  .game-mode .brand-sub{display:none}
+  .game-mode .game-layout{height:calc(100dvh - 43px);grid-template-columns:minmax(0,1fr) 245px}
+  .game-mode .board-shell{width:min(calc(100dvh - 52px),calc(100vw - 254px))}
+  .game-mode .game-side-panel .side-card:first-of-type,.game-mode .game-side-panel .chat-card{display:none}
+  .game-mode .game-side-panel{justify-content:center}
+}
+
+/* Legal destination dots remain visible after selecting a piece, and direct drag never rebuilds the board. */
+.game-mode .square.move::after{content:"";display:block;position:absolute;width:23%;height:23%;border-radius:50%;background:#1b2a40e6;box-shadow:0 0 0 3px #ffffff22,0 0 12px #0008;pointer-events:none;z-index:4}
+.game-mode .square.capture::after{content:"";display:block;position:absolute;inset:5px;border:3px solid #e7c66add;border-radius:50%;box-shadow:0 0 14px #e7c66a44;pointer-events:none;z-index:4}
+.game-mode .square.selected{box-shadow:inset 0 0 0 4px var(--gold),inset 0 0 28px #e7c66a44}
+.game-mode .piece{pointer-events:none}
+
+
+/* V22 — original tap-to-move interaction: no drag, no board jump */
+.game-mode .board,
+.game-mode .square{
+  touch-action:manipulation !important;
+}
+.game-mode .square{cursor:pointer;}
+.game-mode .square.pressing,
+.game-mode .square.drag-source{filter:none;opacity:1;}
+.game-mode .drag-ghost{display:none !important;}
+
+/* V30 — restore the original bottom control bar without changing the V22 game layout */
+@media (orientation:portrait){
+  .game-mode .game-side-panel .bottom-tools{
+    display:grid !important;
+    grid-template-columns:repeat(3,minmax(0,1fr)) !important;
+    direction:rtl !important;
+    gap:7px !important;
+    width:100% !important;
+    box-sizing:border-box !important;
+    margin:0 !important;
+    padding:0 !important;
+    position:fixed !important;
+    left:6px !important;
+    right:6px !important;
+    bottom:8px !important;
+    width:calc(100% - 12px) !important;
+    z-index:50 !important;
+  }
+  .game-mode .game-side-panel .bottom-tools .tool-btn{
+    min-width:0 !important;
+    min-height:44px !important;
+    margin:0 !important;
+  }
+}
+
+.ai-level-note{margin:-4px 0 10px;padding:10px 12px;border-radius:12px;background:rgba(255,255,255,.04);font-size:12px;line-height:1.7;opacity:.78}
+
+
+/* Offline mode picker — does not alter the V22/V30 game layout */
+.offline-mode-modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,.72);z-index:3000;}
+.offline-mode-modal.show{display:flex;}
+.offline-mode-card{width:min(520px,94vw);padding:24px;border-radius:24px;background:var(--panel,#171717);box-shadow:0 20px 60px rgba(0,0,0,.45);text-align:center;}
+.offline-mode-card h2{margin:8px 0 18px;}
+.offline-mode-options{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;}
+.offline-mode-option{border:1px solid rgba(255,255,255,.12);border-radius:18px;padding:18px 12px;background:rgba(255,255,255,.05);color:inherit;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:7px;}
+.offline-mode-option span{font-size:32px;}
+.offline-mode-option b{font-size:17px;}
+.offline-mode-option small{opacity:.7;line-height:1.5;}
+@media(max-width:520px){.offline-mode-options{grid-template-columns:1fr;}.offline-mode-card{padding:20px;}}
+
+
+/* Mobile/WebView: remove the blue tap/focus flash around offline controls. */
+button, .offline-mode-option, .tool-btn, .primary-btn, .icon-btn {
+  outline: none !important;
+  -webkit-tap-highlight-color: transparent;
+}
+button:focus, button:focus-visible, .offline-mode-option:focus, .offline-mode-option:focus-visible {
+  outline: none !important;
+  box-shadow: none;
+}
+.offline-mode-modal, .offline-mode-card, .offline-mode-option {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* V38 — 4K cinematic arena background + animated atmosphere (preserves board/layout) */
+html,body{background:#05070c !important;position:relative;isolation:isolate;max-width:100%;overflow-x:hidden}
+body::before{content:"";position:fixed;inset:-5%;z-index:-3;pointer-events:none;background:url("tomtom_bg_4k.jpg") center center/cover no-repeat;transform:scale(1.06);filter:saturate(1.12) contrast(1.05) brightness(.48);animation:none!important;will-change:auto}
+body::after{content:"";position:fixed;inset:0;z-index:-2;pointer-events:none;background:
+radial-gradient(circle at 50% 45%,rgba(231,198,106,.10),transparent 27%),
+radial-gradient(circle at 18% 35%,rgba(91,73,166,.10),transparent 30%),
+linear-gradient(180deg,rgba(2,4,8,.32),rgba(2,4,8,.72));animation:tomtomAtmosphere 10s ease-in-out infinite alternate;mix-blend-mode:normal}
+body>main,body>.splash{position:relative;z-index:0}
+.home-screen{background:linear-gradient(180deg,rgba(4,7,13,.10),rgba(4,7,13,.24));}
+.home-screen::before{background:radial-gradient(circle at 50% 100%,rgba(231,198,106,.13),transparent 62%) !important}
+
+/* Cinematic splash/loading */
+.splash{background:#05070c url("tomtom_bg_4k.jpg") center/cover no-repeat !important;overflow:hidden}
+.splash::before{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(2,4,8,.18),rgba(2,4,8,.70));pointer-events:none}
+.splash-logo,.splash-title,.splash-pro{position:relative;z-index:1}
+.splash-logo{color:var(--gold);text-shadow:0 0 24px rgba(231,198,106,.42),0 15px 35px #000 !important}
+.splash-title{ text-shadow:0 4px 25px #000 !important }
+.splash-pro{color:#e7c66a !important}
+.loader{position:relative;z-index:2;width:min(320px,68vw);height:5px;background:rgba(255,255,255,.13);border:1px solid rgba(231,198,106,.25);box-shadow:0 0 24px rgba(231,198,106,.12);margin-top:28px}
+.loader span{background:linear-gradient(90deg,#8e7cf6,#e7c66a,#fff1b0,#e7c66a);box-shadow:0 0 16px rgba(231,198,106,.65);animation:load 1.15s infinite ease-in-out}
+.splash::after{content:"THINK  •  PLAN  •  WIN";position:absolute;bottom:7.5%;left:0;right:0;text-align:center;color:rgba(255,239,188,.78);font-size:10px;letter-spacing:5px;font-weight:800;text-shadow:0 2px 12px #000;animation:tomtomBreath 2.4s ease-in-out infinite}
+
+@keyframes tomtomCinematicPan{0%{transform:scale(1.06) translate3d(-1.2%,-.5%,0)}100%{transform:scale(1.12) translate3d(1.2%,.8%,0)}}
+@keyframes tomtomAtmosphere{0%{opacity:.72;filter:brightness(.9)}100%{opacity:1;filter:brightness(1.12)}}
+@keyframes tomtomBreath{50%{opacity:.45;letter-spacing:6px}}
+
+/* Extra cinematic glow on key controls without changing their geometry */
+.home-card-main,.home-card-online,.primary-btn,.arena-btn{box-shadow:0 12px 30px rgba(0,0,0,.38),0 0 28px rgba(231,198,106,.07)}
+
+@media(prefers-reduced-motion:reduce){body::before,body::after,.splash::after,.splash-logo{animation:none !important}}
+
+/* V40 — living Nebula: twinkling + drifting star field over the existing 4K background */
+.nebula-stars{position:fixed;inset:0;z-index:-1;pointer-events:none;overflow:hidden;opacity:.92;mix-blend-mode:screen}
+.nebula-stars::before,.nebula-stars::after{content:"";position:absolute;inset:-12%;background-repeat:repeat;will-change:transform,opacity,background-position}
+.nebula-stars::before{background-image:
+radial-gradient(circle at 8% 18%,#fff 0 1px,transparent 1.8px),
+radial-gradient(circle at 27% 74%,#b9d9ff 0 1px,transparent 1.7px),
+radial-gradient(circle at 43% 31%,#fff 0 1.2px,transparent 2px),
+radial-gradient(circle at 62% 68%,#d9c7ff 0 1px,transparent 1.8px),
+radial-gradient(circle at 79% 23%,#fff 0 1.1px,transparent 1.9px),
+radial-gradient(circle at 91% 61%,#c8b7ff 0 1px,transparent 1.8px);
+background-size:19% 27%,23% 31%,29% 37%,31% 29%,25% 33%,37% 41%;
+animation:nebulaStarsDrift 22s linear infinite,nebulaStarsTwinkle 3.8s ease-in-out infinite}
+.nebula-stars::after{background-image:
+radial-gradient(circle at 16% 53%,#fff 0 1.4px,transparent 2.2px),
+radial-gradient(circle at 36% 12%,#d9c7ff 0 1px,transparent 1.8px),
+radial-gradient(circle at 55% 87%,#fff 0 1px,transparent 1.8px),
+radial-gradient(circle at 73% 46%,#a8d7ff 0 1.3px,transparent 2px),
+radial-gradient(circle at 88% 79%,#fff 0 1px,transparent 1.8px);
+background-size:33% 39%,27% 31%,41% 35%,29% 43%,35% 29%;
+opacity:.62;animation:nebulaStarsDriftReverse 31s linear infinite,nebulaStarsTwinkle 5.2s ease-in-out infinite reverse}
+@keyframes nebulaStarsDrift{0%{transform:translate3d(-1.5%,-1%,0) scale(1.02);background-position:0 0,20px 30px,40px -20px,-30px 15px,25px -35px,-45px 25px}50%{opacity:.72}100%{transform:translate3d(1.5%,1.2%,0) scale(1.06);background-position:55px -35px,-30px 50px,70px 25px,45px -45px,-55px 35px,35px -20px}}
+@keyframes nebulaStarsDriftReverse{0%{transform:translate3d(1%,.8%,0) scale(1.03)}50%{opacity:.45}100%{transform:translate3d(-1.2%,-1%,0) scale(1.08)}}
+@keyframes nebulaStarsTwinkle{0%,100%{opacity:.35;filter:brightness(.85)}45%{opacity:1;filter:brightness(1.8)}62%{opacity:.55;filter:brightness(1.05)}}
+@media (prefers-reduced-motion:reduce){.nebula-stars::before,.nebula-stars::after{animation:none;opacity:.65}}
+
+/* V41 — full-quality 4K Nebula + individually animated stars */
+.starfield{position:fixed;inset:0;width:100%;height:100%;z-index:-1;pointer-events:none;display:block;mix-blend-mode:screen;opacity:.82}
+.nebula-stars{z-index:-2}
+body::before{z-index:-4}
+body::after{z-index:-3}
+@media (prefers-reduced-motion:reduce){.starfield{display:none}}
+
+
+/* V42 — mobile viewport + offline modal stability */
+html{width:100%;min-height:100%;overflow-x:hidden}
+body{width:100%;min-height:100dvh;overscroll-behavior-x:none}
+body.game-mode{width:100%;max-width:100vw;overflow-x:hidden}
+.game-mode #gameScreen{width:100%;max-width:100vw;box-sizing:border-box}
+.game-mode .app{width:100%;max-width:1180px;box-sizing:border-box}
+.offline-mode-modal{width:100%;height:100dvh;min-height:100vh;box-sizing:border-box;overscroll-behavior:contain;background:rgba(3,6,14,.94)!important}
+.offline-mode-card{box-sizing:border-box;background:rgba(12,20,36,.97)!important;border:1px solid rgba(255,255,255,.10);max-height:calc(100dvh - 32px);overflow:auto}
+.offline-mode-option:focus,.offline-mode-option:focus-visible{outline:none!important;box-shadow:0 8px 22px rgba(0,0,0,.28)!important}
+.splash{width:100%;height:100dvh;min-height:100vh;box-sizing:border-box}
+.splash{background-position:center center!important;background-size:cover!important}
+body.offline-modal-open{overflow:hidden!important}
+body.offline-modal-open::before{animation:none}
+body.offline-modal-open::after{animation:none;opacity:.86}
+@media(max-width:600px){.offline-mode-card{width:min(520px,calc(100vw - 24px));padding:18px}.offline-mode-options{gap:9px}.offline-mode-option{padding:15px 10px}}
+
+/* V43 — verified mobile stability: no blue capture overlay, no WebView blur dependency. */
+html,body{max-width:100%;overflow-x:hidden}
+@media (orientation:portrait){
+  body.game-mode{overflow-x:hidden!important;overflow-y:auto!important;height:auto!important;min-height:100dvh}
+  .game-mode #gameScreen{height:auto!important;min-height:100dvh;overflow:visible!important}
+  .game-mode .app{height:auto!important;min-height:100dvh;overflow:visible!important}
+  .game-mode .game-layout{height:auto!important;min-height:0}
+  .game-mode .board-stage{overflow:visible!important}
+}
+.offline-mode-modal,.offline-mode-card,.offline-mode-option{transform:none!important}
+@media (hover:none){button,.offline-mode-option{-webkit-tap-highlight-color:transparent!important}}
+
+/* V45 — separate the decorative nebula layer from the interactive chess UI.
+   The animated 4K background must never participate in the board layout or blur the game. */
+body.game-mode::before{animation:none!important;filter:saturate(1.05) contrast(1.02) brightness(.26)!important;transform:scale(1.04)!important}
+body.game-mode::after{animation:none!important;opacity:.72!important}
+body.game-mode .starfield{opacity:.12!important}
+body.game-mode .nebula-stars{opacity:.18!important}
+body.game-mode .app{background:rgba(5,8,16,.88)!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+body.game-mode .board-shell{isolation:isolate}
+body.game-mode .board-glow{z-index:0}
+body.game-mode .board{z-index:1}
+body.home-mode .starfield{opacity:.82}
+body.home-mode .nebula-stars{opacity:.92}
+.offline-mode-modal{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+
+
+/* V46 — HARD ISOLATION FIX
+   The decorative background is now a real, independent viewport layer.
+   It must never participate in the document's stacking/layout calculations. */
+html,body{background:#080d18!important;position:relative;min-height:100%;}
+body{display:block!important;overflow-x:hidden;}
+.tomtom-bg-layer{position:fixed;inset:0;width:100vw;height:100vh;height:100dvh;z-index:0;pointer-events:none;overflow:hidden;isolation:isolate;background:#080d18;}
+.tomtom-bg-layer::before{content:"";position:absolute;inset:-5%;background:url("tomtom_bg_4k.jpg") center center/cover no-repeat;transform:scale(1.04);filter:saturate(1.08) contrast(1.03) brightness(.48);animation:none!important;will-change:auto;}
+.tomtom-bg-layer::after{content:"";position:absolute;inset:0;background:radial-gradient(circle at 50% 42%,transparent 0%,rgba(2,5,12,.16) 52%,rgba(2,5,12,.62) 100%);}
+.tomtom-bg-layer .nebula-stars{position:absolute;inset:0;z-index:1;opacity:.9;}
+.tomtom-bg-layer .starfield{position:absolute;inset:0;z-index:2;width:100%;height:100%;opacity:.82;}
+.home-screen,.app{position:relative;z-index:1;}
+.splash{z-index:100!important;}
+.modal,.settings,.pause-overlay,.offline-mode-modal{z-index:80!important;}
+body::before,body::after{display:none!important;}
+.home-screen{background:transparent!important;}
+.app{background:rgba(5,8,16,.34)!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;}
+.home-screen::before{z-index:0;}
+body.game-mode .tomtom-bg-layer::before{animation:none;transform:scale(1.02);filter:saturate(1.04) contrast(1.02) brightness(.25);}
+body.game-mode .tomtom-bg-layer::after{background:rgba(2,5,12,.72);}
+body.game-mode .tomtom-bg-layer .nebula-stars,body.game-mode .tomtom-bg-layer .starfield{display:none!important;}
+body.home-mode .tomtom-bg-layer .nebula-stars{opacity:.9;}
+body.home-mode .tomtom-bg-layer .starfield{opacity:.78;}
+body.home-mode{overflow-x:hidden;overflow-y:auto!important;}
+@media (max-width:760px){
+  body.game-mode{overflow-x:hidden!important;overflow-y:auto!important;height:auto!important;min-height:100dvh!important;}
+  .game-mode #gameScreen,.game-mode .app{height:auto!important;min-height:100dvh!important;overflow:visible!important;}
+}
+@media (orientation:landscape){
+  body.game-mode{overflow:hidden!important;height:100dvh!important;min-height:100dvh!important;}
+  .game-mode #gameScreen,.game-mode .app{height:100dvh!important;min-height:0!important;overflow:hidden!important;}
+}
+/* Remove Android/WebView selection/tap flashes from the decorative chrome. */
+button,.home-card,.home-tile,.tool-btn,.icon-btn,.primary-btn,.offline-mode-option{-webkit-tap-highlight-color:transparent!important;}
+
+/* V47 — smoother first entry on mobile: use a tiny first-paint background,
+   then enable the 4K layer and decorative motion after the home UI is visible. */
+.tomtom-bg-layer::before{background-image:url("tomtom_bg_home.jpg");}
+.tomtom-bg-layer .nebula-stars::before,.tomtom-bg-layer .nebula-stars::after{animation:none!important;}
+.tomtom-bg-layer .starfield{opacity:0!important;}
+.tomtom-bg-layer.highres-ready::before{background-image:url("tomtom_bg_4k.jpg");}
+.tomtom-bg-layer.visuals-ready .nebula-stars::before{animation:nebulaStarsDrift 22s linear infinite,nebulaStarsTwinkle 3.8s ease-in-out infinite!important;}
+.tomtom-bg-layer.visuals-ready .nebula-stars::after{animation:nebulaStarsDriftReverse 31s linear infinite,nebulaStarsTwinkle 5.2s ease-in-out infinite reverse!important;}
+.tomtom-bg-layer.visuals-ready .starfield{opacity:.78!important;}
+body.game-mode .tomtom-bg-layer .starfield{opacity:0!important;}
+body.game-mode .tomtom-bg-layer .nebula-stars::before,
+body.game-mode .tomtom-bg-layer .nebula-stars::after{animation:none!important;}
+@media(prefers-reduced-motion:reduce){
+  .tomtom-bg-layer .nebula-stars::before,.tomtom-bg-layer .nebula-stars::after{animation:none!important;}
+}
+
+
+/* V49 — clean audio controls and stable settings overlay */
+.settings{background:rgba(0,0,0,.78)!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;width:100vw;height:100dvh;box-sizing:border-box;overflow-y:auto;overscroll-behavior:contain;}
+.settings-card{max-height:calc(100dvh - 40px);overflow-y:auto;box-sizing:border-box;}
+.volume-row{display:flex!important;gap:10px!important;}
+.volume-control{display:flex;align-items:center;gap:10px;direction:ltr;}
+.volume-control input{flex:1;accent-color:var(--accent);min-width:0;}
+.volume-control output{width:42px;text-align:center;color:#fff;font-weight:700;}
+.sound-note{font-size:11px;line-height:1.8;color:#8390a5;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.06);border-radius:12px;padding:9px 11px;margin:4px 0 14px;}
+@media(max-width:760px){.settings{padding:12px!important;align-items:center!important}.settings-card{width:min(430px,100%);max-height:calc(100dvh - 24px);padding:20px!important;border-radius:22px;}}
+
+/* V50 — settings/audio stability */
+.settings{inset:0!important;width:auto!important;height:auto!important;min-width:0!important;min-height:0!important;box-sizing:border-box!important;}
+.settings-card{position:relative;z-index:1;max-width:430px!important;width:min(430px,100%)!important;}
+.volume-control{display:flex;align-items:center;gap:10px;width:100%;}
+.volume-control input[type="range"]{flex:1;min-width:0;}
+.volume-control output{min-width:48px;text-align:center;color:#fff;}
+@media(max-width:760px){.settings{padding:12px!important;overflow:auto!important;} .settings-card{max-height:calc(100dvh - 24px)!important;}}
+
+/* V54 — prevent visual effects from competing with the chess UI.
+   Keep the lightweight home background on first paint; never start the 4K swap during the
+   first seconds of interaction. The game screen stays fully isolated. */
+body.game-mode .tomtom-bg-layer::before{animation:none!important;transform:scale(1.02)!important;}
+body.game-mode .tomtom-bg-layer .nebula-stars::before,
+body.game-mode .tomtom-bg-layer .nebula-stars::after{animation:none!important;}
+body.game-mode .tomtom-bg-layer .starfield{display:none!important;}
+.tomtom-bg-layer.visuals-ready .starfield{opacity:.55!important;}
+@media (max-width:760px){
+  .tomtom-bg-layer::before{animation:none!important;}
+}
+
+/* V55 — game SFX only; no background music UI. */
+#musicEnabled, label:has(#musicEnabled){display:none!important;}
+
+/* V56 — static cinematic background: no panning, no drifting/resetting stars. */
+.tomtom-bg-layer::before{animation:none!important;transform:scale(1.04)!important;will-change:auto!important;}
+.tomtom-bg-layer .nebula-stars::before,.tomtom-bg-layer .nebula-stars::after{
+  animation:nebulaStarsTwinkle 4.8s ease-in-out infinite!important;
+  transform:none!important;
+  background-position:0 0!important;
+  will-change:opacity!important;
+}
+.tomtom-bg-layer .nebula-stars::after{animation-duration:6.7s!important;animation-delay:-2.1s!important;}
+.tomtom-bg-layer.visuals-ready .nebula-stars::before,.tomtom-bg-layer.visuals-ready .nebula-stars::after{
+  animation:nebulaStarsTwinkle 4.8s ease-in-out infinite!important;
+  transform:none!important;
+  background-position:0 0!important;
+}
+.tomtom-bg-layer.visuals-ready .nebula-stars::after{animation-duration:6.7s!important;animation-delay:-2.1s!important;}
+
+
+/* V57 — clean home emblem + continuous star travel. */
+.home-emblem i{display:none!important;}
+.home-emblem span{transform:translateY(-2px)!important;}
+.tomtom-bg-layer::before{animation:none!important;transform:scale(1.04)!important;}
+.tomtom-bg-layer .nebula-stars::before,.tomtom-bg-layer .nebula-stars::after{animation:nebulaStarsTwinkle 4.8s ease-in-out infinite!important;transform:none!important;background-position:0 0!important;}
+.tomtom-bg-layer .nebula-stars::after{animation-duration:6.7s!important;animation-delay:-2.1s!important;}
+.tomtom-bg-layer.visuals-ready .nebula-stars::before,.tomtom-bg-layer.visuals-ready .nebula-stars::after{animation:nebulaStarsTwinkle 4.8s ease-in-out infinite!important;transform:none!important;background-position:0 0!important;}
+.tomtom-bg-layer.visuals-ready .nebula-stars::after{animation-duration:6.7s!important;animation-delay:-2.1s!important;}
