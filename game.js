@@ -997,6 +997,24 @@ function connectOnline(){
   return ws;
 }
 
+function waitForOnline(timeout=9000){
+  const ws=connectOnline();
+  if(!ws)return Promise.reject(new Error('اتصال WebSocket برقرار نشد.'));
+  if(ws.readyState===WebSocket.OPEN)return Promise.resolve(ws);
+  return new Promise((resolve,reject)=>{
+    let done=false;
+    const finish=(fn,v)=>{if(done)return;done=true;clearTimeout(timer);ws.removeEventListener('open',onOpen);ws.removeEventListener('error',onError);ws.removeEventListener('close',onClose);fn(v)};
+    const onOpen=()=>finish(resolve,ws);
+    const onError=()=>finish(reject,new Error('خطا در WebSocket.'));
+    const onClose=()=>finish(reject,new Error('اتصال WebSocket قطع شد.'));
+    const timer=setTimeout(()=>finish(reject,new Error('زمان اتصال تمام شد.')),timeout);
+    ws.addEventListener('open',onOpen,{once:true});
+    ws.addEventListener('error',onError,{once:true});
+    ws.addEventListener('close',onClose,{once:true});
+  });
+}
+function makeRoomCode(){return 'TOM'+Math.random().toString(36).slice(2,6).toUpperCase()}
+
 window.connectOnline=connectOnline;window.sendOnline=sendOnline;
 const serverInput=document.getElementById('serverUrlInput');
 const savedServer=localStorage.getItem('tomtom_server_url');if(serverInput&&savedServer)serverInput.value=savedServer;
@@ -1014,18 +1032,25 @@ const testServerBtn=document.getElementById('testServer');if(testServerBtn)testS
   }catch(e){box.textContent='HTTP در دسترس است، اما WebSocket وصل نشد.';console.warn('online test',e)}
 });
 const closeOnlineBtn=document.getElementById('closeOnline');if(closeOnlineBtn)closeOnlineBtn.addEventListener('click',closeCurrentPanel);
-const hostRoomBtn=document.getElementById('hostRoom');if(hostRoomBtn)hostRoomBtn.addEventListener('click',()=>{
-  const code=(document.getElementById('roomCode').value||'').trim();
-  const ws=connectOnline();
-  const send=()=>sendOnline({type:'create_room',room:code,name:profile.name,username:localStorage.getItem('tomtom_username')||''});
-  if(ws?.readyState===WebSocket.OPEN)send();else if(ws)ws.addEventListener('open',send,{once:true});else document.getElementById('roomMessage').textContent='اتصال WebSocket برقرار نشد.';
+const hostRoomBtn=document.getElementById('hostRoom');if(hostRoomBtn)hostRoomBtn.addEventListener('click',async()=>{
+  const input=document.getElementById('roomCode'),box=document.getElementById('roomMessage');
+  let code=(input.value||'').trim().toUpperCase();
+  if(!code)code=makeRoomCode();
+  input.value=code;box.textContent='در حال ساخت اتاق '+code+'…';
+  try{
+    await waitForOnline();
+    sendOnline({type:'create_room',room:code,name:profile.name,username:localStorage.getItem('tomtom_username')||''});
+    box.textContent='درخواست ساخت اتاق ارسال شد؛ منتظر پاسخ سرور…';
+  }catch(e){box.textContent=e.message||'اتصال WebSocket برقرار نشد.'}
 });
-const joinRoomBtn=document.getElementById('joinRoom');if(joinRoomBtn)joinRoomBtn.addEventListener('click',()=>{
-  const code=(document.getElementById('roomCode').value||'').trim();
-  if(!code){document.getElementById('roomMessage').textContent='کد اتاق را وارد کنید.';return}
-  const ws=connectOnline();
-  const send=()=>sendOnline({type:'join_room',room:code,name:profile.name,username:localStorage.getItem('tomtom_username')||''});
-  if(ws?.readyState===WebSocket.OPEN)send();else if(ws)ws.addEventListener('open',send,{once:true});else document.getElementById('roomMessage').textContent='اتصال WebSocket برقرار نشد.';
+const joinRoomBtn=document.getElementById('joinRoom');if(joinRoomBtn)joinRoomBtn.addEventListener('click',async()=>{
+  const code=(document.getElementById('roomCode').value||'').trim().toUpperCase(),box=document.getElementById('roomMessage');
+  if(!code){box.textContent='کد اتاق را وارد کنید.';return}
+  box.textContent='در حال ورود به اتاق '+code+'…';
+  try{
+    await waitForOnline();
+    sendOnline({type:'join_room',room:code,name:profile.name,username:localStorage.getItem('tomtom_username')||''});
+  }catch(e){box.textContent=e.message||'اتصال WebSocket برقرار نشد.'}
 });
 const copyRoomBtn=document.getElementById('copyRoom');if(copyRoomBtn)copyRoomBtn.addEventListener('click',()=>navigator.clipboard?.writeText(document.getElementById('roomCode').value).then(()=>document.getElementById('roomMessage').textContent='کد اتاق کپی شد.').catch(()=>{}));
 

@@ -22,9 +22,9 @@
  async function syncResult(result){const a=authUser();if(!a)return;try{const d=await request('/api/result',{method:'POST',body:JSON.stringify({...a,result})});applyUser(d.user);await request('/api/game',{method:'POST',body:JSON.stringify({...a,game:{players:[a.username],result,moves:moveLog}})});}catch(e){console.warn('online result',e.message)}}
  window.tomtomSyncResult=syncResult;
  function matchmake(){
-   const ws=connectOnline();if(!ws)return;
    const send=()=>{sendOnline({type:'matchmake',name:profile.name,username:account.username||'guest'});$('roomMessage').textContent='⏳ در صف پیدا کردن حریف…';$('roomMessage').classList.add('match-wait')};
-   if(ws.readyState===WebSocket.OPEN)send();else ws.addEventListener('open',send,{once:true});
+   if(typeof waitForOnline==='function'){waitForOnline().then(send).catch(e=>{$('roomMessage').textContent=e.message||'اتصال WebSocket برقرار نشد.'})}
+   else {const ws=connectOnline();if(!ws)return;if(ws.readyState===WebSocket.OPEN)send();else ws.addEventListener('open',send,{once:true});}
  }
  // Add identity to room creation/join payloads by wrapping the socket send path is not necessary for gameplay,
  // but the server stores the display name already. Matchmaking uses the current profile directly.
