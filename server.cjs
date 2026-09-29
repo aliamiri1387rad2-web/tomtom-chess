@@ -65,11 +65,25 @@ const server=http.createServer((req,res)=>{
  const safe=path.normalize(reqPath).replace(/^([.][.][\\/])+/,''),baseRoot=fs.existsSync(STATIC_ROOT)?STATIC_ROOT:ROOT,file=path.join(baseRoot,safe);
  if(!file.startsWith(baseRoot)){res.writeHead(403);return res.end('Forbidden')}
  fs.readFile(file,(err,data)=>{
-   if(err && fs.existsSync(STATIC_ROOT) && !path.extname(reqPath) && reqPath!=='/index.html'){
-     return fs.readFile(path.join(STATIC_ROOT,'index.html'),(e,d)=>{
-       if(e){res.writeHead(404);return res.end('Not found')}
-       res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'});res.end(d)
-     })
+   // Vite puts files from /public into /dist, but the original chess files
+   // may also live at the project root. If a requested static file is not
+   // in dist, fall back to the project root before returning 404.
+   if(err && fs.existsSync(STATIC_ROOT)){
+     const rootFile=path.join(ROOT,safe);
+     if(rootFile.startsWith(ROOT) && fs.existsSync(rootFile)) {
+       return fs.readFile(rootFile,(e,d)=>{
+         if(e){res.writeHead(404);return res.end('Not found')}
+         const ext=path.extname(rootFile);
+         const types={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json'};
+         res.writeHead(200,{'Content-Type':types[ext]||'application/octet-stream','Cache-Control':'no-store'});res.end(d)
+       })
+     }
+     if(!path.extname(reqPath) && reqPath!=='/index.html'){
+       return fs.readFile(path.join(STATIC_ROOT,'index.html'),(e,d)=>{
+         if(e){res.writeHead(404);return res.end('Not found')}
+         res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'});res.end(d)
+       })
+     }
    }
    if(err){res.writeHead(404);return res.end('Not found')}
    const ext=path.extname(file);
