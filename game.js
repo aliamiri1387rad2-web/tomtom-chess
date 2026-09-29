@@ -971,7 +971,7 @@ function onlineWsUrl(){
   if(u.protocol==='https:')u.protocol='wss:';
   else if(u.protocol==='http:')u.protocol='ws:';
   if(!/^wss?:$/.test(u.protocol))throw new Error('آدرس سرور نامعتبر است.');
-  u.pathname='/ws';u.search='';u.hash='';
+  u.pathname='/';u.search='';u.hash='';
   return u.toString();
 }
 function sendOnline(msg){
@@ -992,8 +992,8 @@ function connectOnline(){
     if(ws.readyState===WebSocket.CONNECTING){try{ws.close()}catch(_){} $('onlineState').textContent='اتصال WebSocket برقرار نشد.'}
   },9000);
   ws.addEventListener('open',()=>{clearTimeout(failTimer);online.connected=true;$('onlineState').textContent='متصل به سرور';$('onlineDot').classList.add('connected')});
-  ws.addEventListener('close',()=>{clearTimeout(failTimer);online.connected=false;online.serverReady=false;online.started=false;if(online.ws===ws)online.ws=null;$('onlineState').textContent='اتصال قطع شد';$('onlineDot').classList.remove('connected');if(window.__onlinePending){for(const k of Object.keys(window.__onlinePending)){try{window.__onlinePending[k].reject(new Error('اتصال WebSocket قطع شد.'))}catch(_){}delete window.__onlinePending[k]}}});
-  ws.addEventListener('error',()=>{$('onlineState').textContent='خطا در WebSocket'});
+  ws.addEventListener('close',ev=>{clearTimeout(failTimer);online.connected=false;online.serverReady=false;online.started=false;if(online.ws===ws)online.ws=null;const detail=ev&&ev.code?` (${ev.code}${ev.reason?': '+ev.reason:''})`:'';$('onlineState').textContent='اتصال قطع شد'+detail;$('onlineDot').classList.remove('connected');if(window.__onlinePending){for(const k of Object.keys(window.__onlinePending)){try{window.__onlinePending[k].reject(new Error('اتصال WebSocket قطع شد.'))}catch(_){}delete window.__onlinePending[k]}}});
+  ws.addEventListener('error',()=>{$('onlineState').textContent='خطا در WebSocket؛ اتصال WSS برقرار نشد.'});
   ws.addEventListener('message',ev=>{let m;try{m=JSON.parse(ev.data)}catch(_){return}
     if(m.type==='connected'){online.serverReady=true;$('onlineState').textContent='متصل به سرور'}
     else if(m.type==='room_created'||m.type==='room_joined'){
@@ -1024,10 +1024,19 @@ function connectOnline(){
     else if(m.type==='opponent_left'){online.started=false;$('roomMessage').textContent='حریف از اتاق خارج شد.';$('chatState').textContent='منتظر'}
     else if(m.type==='error'){
       $('roomMessage').textContent=m.message||'خطا از طرف سرور.';
-      if(m.reqId&&window.__onlinePending&&window.__onlinePending[m.reqId])window.__onlinePending[m.reqId].reject(new Error(m.message||'خطای سرور'));
+      if(window.__onlinePending){
+        if(m.reqId&&window.__onlinePending[m.reqId])window.__onlinePending[m.reqId].reject(new Error(m.message||'خطای سرور'));
+        else {const key=Object.keys(window.__onlinePending)[0];if(key)window.__onlinePending[key].reject(new Error(m.message||'خطای سرور'))}
+      }
     }
-    if(m.reqId&&window.__onlinePending&&window.__onlinePending[m.reqId]&&['room_created','room_joined','match_found','match_waiting'].includes(m.type)){
-      window.__onlinePending[m.reqId].resolve(m);
+    if(window.__onlinePending){
+      if(m.reqId&&window.__onlinePending[m.reqId]&&['room_created','room_joined','match_found','match_waiting'].includes(m.type)){
+        window.__onlinePending[m.reqId].resolve(m);
+      }else if(['room_created','room_joined','match_found','match_waiting'].includes(m.type)){
+        // Backward compatibility: older deployed servers may answer without reqId.
+        const key=Object.keys(window.__onlinePending).find(k=>window.__onlinePending[k]&&(window.__onlinePending[k].type===m.type||(window.__onlinePending[k].type==='matchmake'&&['match_waiting','match_found'].includes(m.type))));
+        if(key)window.__onlinePending[key].resolve(m);
+      }
     }
   });
   ws.__tomtomPingTimer&&clearInterval(ws.__tomtomPingTimer);
@@ -1051,7 +1060,7 @@ function onlineRequest(type,payload={},timeout=10000){
     const reqId='r'+Date.now()+Math.random().toString(16).slice(2);
     window.__onlinePending=window.__onlinePending||{};
     const timer=setTimeout(()=>{delete window.__onlinePending[reqId];reject(new Error('سرور در زمان تعیین‌شده پاسخ نداد.'))},timeout);
-    window.__onlinePending[reqId]={resolve:(m)=>{clearTimeout(timer);delete window.__onlinePending[reqId];resolve(m)},reject:(e)=>{clearTimeout(timer);delete window.__onlinePending[reqId];reject(e)}};
+    window.__onlinePending[reqId]={type:type,resolve:(m)=>{clearTimeout(timer);delete window.__onlinePending[reqId];resolve(m)},reject:(e)=>{clearTimeout(timer);delete window.__onlinePending[reqId];reject(e)}};
     try{ws.send(JSON.stringify({type,...payload,reqId}))}catch(e){clearTimeout(timer);delete window.__onlinePending[reqId];reject(e)}
   }));
 }

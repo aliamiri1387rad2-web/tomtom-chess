@@ -93,6 +93,8 @@ const server=http.createServer((req,res)=>{
  })
 });
 const wss=new WebSocket.Server({server});
+server.on('upgrade',(req)=>{console.log('WS upgrade request:',req.url,req.headers.upgrade||'')});
+wss.on('connection',(ws,req)=>{console.log('WS connected:',req.url)});
 // One in-memory lobby/room registry is safe only while this service has one
 // active process/instance. render.yaml pins this service to one instance.
 const heartbeat=setInterval(()=>{
