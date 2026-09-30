@@ -1,6 +1,6 @@
 {
   "name": "tomtom-chess-online",
-  "version": "6.5.0",
+  "version": "6.7.1",
   "private": true,
   "description": "TOMTOM CHESS - mobile-ready React/Vite shell with robust WebSocket rooms and matchmaking",
   "type": "module",

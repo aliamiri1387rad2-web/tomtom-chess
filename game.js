@@ -971,7 +971,7 @@ function onlineWsUrl(){
   if(u.protocol==='https:')u.protocol='wss:';
   else if(u.protocol==='http:')u.protocol='ws:';
   if(!/^wss?:$/.test(u.protocol))throw new Error('آدرس سرور نامعتبر است.');
-  u.pathname='/';u.search='';u.hash='';
+  u.pathname='/ws';u.search='';u.hash='';
   return u.toString();
 }
 function sendOnline(msg){
@@ -995,7 +995,7 @@ function connectOnline(){
   ws.addEventListener('close',ev=>{clearTimeout(failTimer);online.connected=false;online.serverReady=false;online.started=false;if(online.ws===ws)online.ws=null;const detail=ev&&ev.code?` (${ev.code}${ev.reason?': '+ev.reason:''})`:'';$('onlineState').textContent='اتصال قطع شد'+detail;$('onlineDot').classList.remove('connected');if(window.__onlinePending){for(const k of Object.keys(window.__onlinePending)){try{window.__onlinePending[k].reject(new Error('اتصال WebSocket قطع شد.'))}catch(_){}delete window.__onlinePending[k]}}});
   ws.addEventListener('error',()=>{$('onlineState').textContent='خطا در WebSocket؛ اتصال WSS برقرار نشد.'});
   ws.addEventListener('message',ev=>{let m;try{m=JSON.parse(ev.data)}catch(_){return}
-    if(m.type==='connected'){online.serverReady=true;$('onlineState').textContent='متصل به سرور'}
+    if(m.type==='connected'){online.serverReady=true;ws.__tomtomAppReady=true;if(ws.__tomtomReadyWaiters){const q=ws.__tomtomReadyWaiters.splice(0);q.forEach(fn=>{try{fn()}catch(_){}})}$('onlineState').textContent='متصل به سرور'}
     else if(m.type==='room_created'||m.type==='room_joined'){
       online.room=m.room;online.color=m.color;online.started=false;
       $('roomCode').value=m.room;
@@ -1075,7 +1075,7 @@ const savedServer=localStorage.getItem('tomtom_server_url');if(serverInput&&save
 const saveServerBtn=document.getElementById('saveServerUrl');if(saveServerBtn)saveServerBtn.addEventListener('click',()=>{let v=serverInput.value.trim().replace(/\/health$/i,'').replace(/\/$/,'');if(v){localStorage.setItem('tomtom_server_url',v);serverInput.value=v;document.getElementById('roomMessage').textContent='آدرس سرور ذخیره شد.'}});
 const testServerBtn=document.getElementById('testServer');if(testServerBtn)testServerBtn.addEventListener('click',async()=>{
   const box=document.getElementById('roomMessage');box.textContent='در حال تست HTTP و WebSocket…';
-  try{const r=await fetch(serverBase()+'/health',{cache:'no-store'});const d=await r.json();if(!d.ok)throw new Error('HTTP health failed');await waitForOnline(9000);box.textContent='سرور و WebSocket سالم و متصل هستند.'}
+  try{const r=await fetch(serverBase()+'/health',{cache:'no-store'});const d=await r.json();if(!d.ok)throw new Error('HTTP health failed');const ws=await waitForOnline(9000);if(ws.__tomtomAppReady!==true)await new Promise((resolve,reject)=>{const t=setTimeout(()=>reject(new Error('اتصال WebSocket برقرار شد، اما پیام سرور دریافت نشد.')),9000);ws.__tomtomReadyWaiters=ws.__tomtomReadyWaiters||[];ws.__tomtomReadyWaiters.push(()=>{clearTimeout(t);resolve()})});box.textContent='سرور و WebSocket سالم و متصل هستند.'}
   catch(e){box.textContent=e.message||'اتصال WebSocket برقرار نشد.';console.warn('online test',e)}
 });
 const closeOnlineBtn=document.getElementById('closeOnline');if(closeOnlineBtn)closeOnlineBtn.addEventListener('click',closeCurrentPanel);

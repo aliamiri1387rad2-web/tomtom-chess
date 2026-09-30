@@ -92,7 +92,7 @@ const server=http.createServer((req,res)=>{
    res.writeHead(200,{'Content-Type':types[ext]||'application/octet-stream','Cache-Control':'no-store'});res.end(data)
  })
 });
-const wss=new WebSocket.Server({server});
+const wss=new WebSocket.Server({server,path:'/ws'});
 server.on('upgrade',(req)=>{console.log('WS upgrade request:',req.url,req.headers.upgrade||'')});
 wss.on('connection',(ws,req)=>{console.log('WS connected:',req.url)});
 // One in-memory lobby/room registry is safe only while this service has one
