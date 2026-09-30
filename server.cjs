@@ -92,8 +92,18 @@ const server=http.createServer((req,res)=>{
    res.writeHead(200,{'Content-Type':types[ext]||'application/octet-stream','Cache-Control':'no-store'});res.end(data)
  })
 });
-const wss=new WebSocket.Server({server,path:'/ws'});
-server.on('upgrade',(req)=>{console.log('WS upgrade request:',req.url,req.headers.upgrade||'')});
+// WebSocket is handled explicitly so the Render proxy and Node agree on the /ws upgrade.
+const wss=new WebSocket.Server({noServer:true});
+server.on('upgrade',(req,socket,head)=>{
+  const u=new URL(req.url,'http://localhost');
+  console.log('WS upgrade request:',u.pathname,req.headers.upgrade||'');
+  if(u.pathname!=='/ws'){
+    try{socket.write('HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n')}catch(_){}
+    try{socket.destroy()}catch(_){}
+    return;
+  }
+  wss.handleUpgrade(req,socket,head,ws=>wss.emit('connection',ws,req));
+});
 wss.on('connection',(ws,req)=>{console.log('WS connected:',req.url)});
 // One in-memory lobby/room registry is safe only while this service has one
 // active process/instance. render.yaml pins this service to one instance.

@@ -1046,13 +1046,18 @@ function connectOnline(){
 function waitForOnline(timeout=9000){
   const ws=connectOnline();
   if(!ws)return Promise.reject(new Error('اتصال WebSocket برقرار نشد.'));
-  if(ws.readyState===WebSocket.OPEN)return Promise.resolve(ws);
+  if(ws.readyState===WebSocket.OPEN && ws.__tomtomAppReady===true)return Promise.resolve(ws);
   return new Promise((resolve,reject)=>{
     let done=false;
     const finish=(fn,v)=>{if(done)return;done=true;clearTimeout(timer);ws.removeEventListener('open',onOpen);ws.removeEventListener('error',onError);ws.removeEventListener('close',onClose);fn(v)};
-    const onOpen=()=>finish(resolve,ws),onError=()=>finish(reject,new Error('خطا در WebSocket.')),onClose=()=>finish(reject,new Error('اتصال WebSocket قطع شد.'));
-    const timer=setTimeout(()=>finish(reject,new Error('زمان اتصال تمام شد.')),timeout);
+    const onReady=()=>finish(resolve,ws);
+    const onOpen=()=>{if(ws.__tomtomAppReady===true)onReady()};
+    const onError=()=>finish(reject,new Error('خطا در WebSocket.'));
+    const onClose=()=>finish(reject,new Error('اتصال WebSocket قطع شد.'));
+    const timer=setTimeout(()=>finish(reject,new Error('اتصال WebSocket برقرار شد، اما برنامه سرور پاسخ اولیه نداد.')),timeout);
     ws.addEventListener('open',onOpen,{once:true});ws.addEventListener('error',onError,{once:true});ws.addEventListener('close',onClose,{once:true});
+    ws.__tomtomReadyWaiters=ws.__tomtomReadyWaiters||[];
+    ws.__tomtomReadyWaiters.push(onReady);
   });
 }
 function onlineRequest(type,payload={},timeout=10000){
