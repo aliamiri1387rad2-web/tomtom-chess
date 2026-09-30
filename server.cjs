@@ -17,7 +17,9 @@ try { if (fs.existsSync(DB_FILE)) db = { ...db, ...JSON.parse(fs.readFileSync(DB
 function persist(){ try { fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2)); } catch (_) {} }
 function hash(v){ return crypto.createHash('sha256').update(String(v)).digest('hex'); }
 function token(){ return crypto.randomBytes(24).toString('hex'); }
-function leagueFor(rating){ const r=Number(rating)||1200; if(r<1000)return {key:'bronze',name:'برنز',min:0,max:999}; if(r<1200)return {key:'silver',name:'نقره‌ای',min:1000,max:1199}; if(r<1400)return {key:'gold',name:'طلایی',min:1200,max:1399}; if(r<1600)return {key:'platinum',name:'پلاتینیوم',min:1400,max:1599}; if(r<1800)return {key:'diamond',name:'الماس',min:1600,max:1799}; return {key:'master',name:'مستر',min:1800,max:null}; }
+function leagueFor(rating){ const r=Number(rating)||0; if(r<800)return {key:'bronze',name:'برنز',min:0,max:799}; if(r<1000)return {key:'silver',name:'نقره‌ای',min:800,max:999}; if(r<1200)return {key:'gold',name:'طلایی',min:1000,max:1199}; if(r<1400)return {key:'platinum',name:'پلاتینیوم',min:1200,max:1399}; if(r<1600)return {key:'diamond',name:'الماس',min:1400,max:1599}; if(r<1800)return {key:'master',name:'مستر',min:1600,max:1799}; if(r<2000)return {key:'grandmaster',name:'گرندمستر',min:1800,max:1999}; return {key:'champion',name:'قهرمان',min:2000,max:null}; }
+function ratingGain(rating){const k=leagueFor(rating).key;return ({bronze:15,silver:12,gold:10,platinum:8,diamond:6,master:5,grandmaster:4,champion:3})[k]||3}
+function ratingLoss(rating){const k=leagueFor(rating).key;return ({bronze:6,silver:7,gold:8,platinum:9,diamond:10,master:11,grandmaster:12,champion:13})[k]||8}
 function safeUser(u){ return { username:u.username, name:u.name, rating:u.rating, wins:u.wins, losses:u.losses, draws:u.draws, level:u.level, xp:u.xp, league:leagueFor(u.rating) }; }
 function auth(body){ const u=db.users[String(body.username||'').toLowerCase()]; return u && u.token===body.token ? u : null; }
 
@@ -159,7 +161,7 @@ const server = http.createServer((req, res) => {
       if(req.method==='POST' && url.pathname==='/api/result'){
         const u=auth(msg);if(!u)return json(res,401,{error:'نیاز به ورود دارید.'});
         const result=['win','loss','draw'].includes(msg.result)?msg.result:'draw';
-        if(result==='win'){u.wins++;u.rating+=12;u.xp+=35}else if(result==='loss'){u.losses++;u.rating=Math.max(100,u.rating-10);u.xp+=8}else{u.draws++;u.xp+=18}
+        if(result==='win'){u.wins++;u.rating+=ratingGain(u.rating);u.xp+=35}else if(result==='loss'){u.losses++;u.rating=Math.max(0,u.rating-ratingLoss(u.rating));u.xp+=8}else{u.draws++;u.xp+=18}
         while(u.xp>=100){u.xp-=100;u.level++}persist();return json(res,200,{user:safeUser(u)});
       }
       if(req.method==='POST' && url.pathname==='/api/game'){
