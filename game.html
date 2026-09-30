@@ -50,7 +50,6 @@
     <section class="home-grid">
       <button id="homeProfileBtn" class="home-tile"><strong>♙</strong><b>پروفایل</b><small>بازیکن و آمار</small></button>
       <button id="homeRankBtn" class="home-tile"><strong>🏆</strong><b>رنکینگ</b><small>جدول آنلاین</small></button>
-      <button id="homeClanBtn" class="home-tile"><strong>🏰</strong><b>کلن‌ها</b><small>جنگ و گفت‌وگوی کلنی</small></button>
       <button id="homeSettingsTile" class="home-tile"><strong>⚙</strong><b>تنظیمات</b><small>صدا و ظاهر</small></button>
     </section>
 
@@ -63,7 +62,7 @@
 
   <main class="app" id="gameScreen">
     <header class="topbar">
-      <button id="backHomeBtn" class="icon-btn home-back" aria-label="بازگشت به صفحه اصلی">→</button>
+      <button id="backHomeBtn" class="icon-btn home-back" aria-label="چت حریف" title="چت حریف">💬</button>
       <div>
         <div class="brand"><span class="brand-crown">♛</span> TOMTOM <b>CHESS</b></div>
         <div class="brand-sub">PRO EDITION</div>
@@ -216,23 +215,6 @@
       <div class="online-actions"><button id="registerBtn" class="secondary-btn">ثبت‌نام</button><button id="loginBtn2" class="primary-btn">ورود</button></div>
       <button id="logoutBtn" class="secondary-btn" style="width:100%;margin-top:8px">خروج از حساب</button>
       <div id="authMessage" class="room-message"></div>
-    </div>
-  </div>
-
-  <div class="settings" id="clanPanel" aria-hidden="true">
-    <div class="settings-card clan-card">
-      <div class="settings-head"><h2>🏰 TOMTOM CLANS</h2><button id="closeClan" class="icon-btn">×</button></div>
-      <div id="clanBody" class="clan-body"><div class="room-message">در حال بررسی کلن…</div></div>
-    </div>
-  </div>
-
-  <div class="settings" id="clanChatPanel" aria-hidden="true">
-    <div class="settings-card clan-card">
-      <div class="settings-head"><h2>💬 گفت‌وگوی کلن</h2><button id="closeClanChat" class="icon-btn">×</button></div>
-      <div id="clanChatState" class="online-status"><span class="dot"></span><b>کلن</b></div>
-      <div id="clanChatMessages" class="chat-messages clan-chat-messages"><div class="chat-empty">گفت‌وگوی اعضای کلن.</div></div>
-      <div class="emoji-row" data-target="clanChatInput"><button type="button">😀</button><button type="button">😂</button><button type="button">🔥</button><button type="button">👏</button><button type="button">⚔️</button><button type="button">🏰</button></div>
-      <form id="clanChatForm" class="chat-form"><input id="clanChatInput" class="chat-input" maxlength="180" placeholder="پیام برای اعضای کلن…"><button class="chat-send" type="submit">➤</button></form>
     </div>
   </div>
 

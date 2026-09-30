@@ -780,10 +780,6 @@ body.game-mode .tomtom-bg-layer .starfield{display:none!important;}
 
 .league-note{background:#111d31;border:1px solid #ffffff12;border-radius:12px;padding:9px;margin:8px 0 10px;color:#aeb9ca;font-size:10px;line-height:1.7}
 
-/* ===== CLANS / EMOJI ===== */
-.clan-card{max-height:88vh;overflow:auto}.clan-header{display:flex;gap:12px;align-items:center;padding:12px;border:1px solid rgba(255,255,255,.1);border-radius:16px;background:rgba(255,255,255,.04)}.clan-badge{width:56px;height:56px;border-radius:16px;display:grid;place-items:center;font-size:32px;background:rgba(255,255,255,.08)}.clan-header h3{margin:0 0 4px}.clan-header p,.clan-war-box p{margin:4px 0;opacity:.75}.clan-war-box{margin-top:10px;padding:12px;border-radius:16px;background:rgba(115,160,255,.08);border:1px solid rgba(115,160,255,.2)}.clan-war-box button{width:100%;margin-top:7px}.clan-members-head{display:flex;justify-content:space-between;margin:14px 2px 8px}.clan-members{display:grid;gap:7px}.clan-member,.clan-search-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 10px;border-radius:12px;background:rgba(255,255,255,.045)}.clan-member>div{margin-inline-end:auto}.clan-member small,.clan-search-row small{display:block;opacity:.65;margin-top:2px}.presence{display:block;width:9px;height:9px;border-radius:50%;background:#777}.presence.on{background:#45d483;box-shadow:0 0 8px rgba(69,212,131,.7)}.clan-form,.clan-search{display:grid;gap:8px}.clan-search{grid-template-columns:1fr auto;margin-top:10px}.clan-search-row{margin-top:7px}.emoji-row{display:flex;gap:5px;padding:5px 0}.emoji-row button{border:0;background:rgba(255,255,255,.06);border-radius:9px;padding:5px 8px;color:inherit;font-size:16px}.war-score{font-size:18px;font-weight:800;margin-top:6px}.clan-chat-messages{min-height:260px;max-height:48vh}
-
-.clan-role-select{max-width:105px;padding:6px;border-radius:8px;background:rgba(255,255,255,.06);color:inherit;border:1px solid rgba(255,255,255,.1)}
 
 /* S2 rank/presence UI */
 .rank-badge{display:block;object-fit:contain;filter:drop-shadow(0 7px 12px #0008)}

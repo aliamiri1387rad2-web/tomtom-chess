@@ -59,11 +59,12 @@ function openHomePanel(panel){
 let tomtomNavReady=false;
 function navState(){ return window.history.state?.tomtom || null; }
 function goHomeFromGame(){
+  if(online && (online.connected||online.room)) leaveOnlineSession();
   if(navState()==='game'){ window.history.back(); return; }
   showHome();
 }
 function openHomePanelNav(panel){
-  const key=panel===onlinePanel?'online':panel===profilePanel?'profile':panel===rankPanel?'rank':panel===clanPanel?'clan':panel===clanChatPanel?'clanchat':'settings';
+  const key=panel===onlinePanel?'online':panel===profilePanel?'profile':panel===rankPanel?'rank':'settings';
   window.history.pushState({tomtom:key},'',location.href);
   openHomePanel(panel);
 }
@@ -77,8 +78,6 @@ window.addEventListener('popstate',()=>{
   else if(st==='online'){ openHomePanel(onlinePanel); }
   else if(st==='profile'){ openHomePanel(profilePanel); }
   else if(st==='rank'){ openHomePanel(rankPanel); }
-  else if(st==='clan'){ openHomePanel(clanPanel); if(window.tomtomLoadClan)window.tomtomLoadClan(); }
-  else if(st==='clanchat'){ openHomePanel(clanChatPanel); }
   else if(st==='settings'){ openHomePanel(settingsPanel); }
   else { showHome(); }
 });
@@ -807,8 +806,6 @@ const settingsPanel=document.getElementById('settings');
 const profilePanel=document.getElementById('profilePanel');
 const onlinePanel=document.getElementById('onlinePanel');
 const rankPanel=document.getElementById('rankPanel');
-const clanPanel=document.getElementById('clanPanel');
-const clanChatPanel=document.getElementById('clanChatPanel');
 const playerName=document.getElementById('playerName');
 const avatarSelect=document.getElementById('avatarSelect');
 const whitePlayer=document.getElementById('whitePlayer');
@@ -853,7 +850,6 @@ function awardResult(result){
   while(profile.xp>=100){profile.xp-=100;profile.level++}
   saveProfileData();
   if(typeof window.tomtomSyncResult==='function') window.tomtomSyncResult(result);
-  if(typeof window.tomtomClanResult==='function' && online.connected && online.started) window.tomtomClanResult(result);
 }
 function updateClocks(){
   const f=s=>`${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
@@ -1046,7 +1042,7 @@ function handleOnlineMessage(ws,m){
   else if(m.type==='resigned'){online.started=false;const box=document.getElementById('roomMessage');if(box)box.textContent='حریف تسلیم شد.'}
   else if(m.type==='chat'&&m.color!==online.color){addChat(m.name||'حریف',m.text,false)}
   else if(m.type==='opponent_left'){
-    online.started=false;const sb=document.getElementById('startOnlineGame');if(sb)sb.style.display='none';const box=document.getElementById('roomMessage');if(box)box.textContent='حریف از اتاق خارج شد.';const cs=document.getElementById('chatState');if(cs)cs.textContent='منتظر';
+    online.started=false;online.room=null;online.color=null;const sb=document.getElementById('startOnlineGame');if(sb)sb.style.display='none';const box=document.getElementById('roomMessage');if(box)box.textContent='حریف از اتاق خارج شد.';const cs=document.getElementById('chatState');if(cs)cs.textContent='آفلاین';updateOpponentPresence([]);setTimeout(()=>{if(navState()==='game'){window.history.back();}else{showHome();}},350);
   }else if(m.type==='error'){
     const box=document.getElementById('roomMessage');if(box)box.textContent=m.message||'خطا از طرف سرور.';
   }
@@ -1118,7 +1114,6 @@ const homeOnlineBtn=document.getElementById('homeOnlineBtn');
 const homeProfileBtn=document.getElementById('homeProfileBtn');
 const homeRankBtn=document.getElementById('homeRankBtn');
 const homeSettingsBtn=document.getElementById('homeSettingsBtn');
-const homeClanBtn=document.getElementById('homeClanBtn');
 const homeSettingsTile=document.getElementById('homeSettingsTile');
 const backHomeBtn=document.getElementById('backHomeBtn');
 
@@ -1139,11 +1134,22 @@ const cancelOfflineMode=document.getElementById('cancelOfflineMode');
 if(localTwoPlayerBtn)localTwoPlayerBtn.addEventListener('click',()=>startOfflineMode('human'));
 if(aiMatchBtn)aiMatchBtn.addEventListener('click',()=>startOfflineMode('computer'));
 if(cancelOfflineMode)cancelOfflineMode.addEventListener('click',closeOfflineMode);
-if(backHomeBtn) backHomeBtn.addEventListener('click',()=>{ closeOfflineMode(); hideModal(); hidePause(); closeAllPanels(); goHomeFromGame(); });
+function leaveOnlineSession(){
+  try{ if(online && online.ws && online.ws.readyState===WebSocket.OPEN){ sendOnline({type:'leave_room'}); setTimeout(()=>{try{online.ws.close()}catch(_){}},120); } }catch(_){}
+  online.room=null; online.color=null; online.started=false; online.connected=false;
+}
+if(backHomeBtn) backHomeBtn.addEventListener('click',()=>{
+  if(online.connected || online.room){
+    const chat=document.querySelector('.chat-card');
+    if(chat){ chat.scrollIntoView({behavior:'smooth',block:'center'}); const input=document.getElementById('chatInput'); setTimeout(()=>input?.focus(),250); }
+    return;
+  }
+  closeOfflineMode(); hideModal(); hidePause(); closeAllPanels(); goHomeFromGame();
+});
+window.addEventListener('pagehide',leaveOnlineSession);
 if(homeOnlineBtn) homeOnlineBtn.addEventListener('click',()=>openHomePanelNav(onlinePanel));
 if(homeProfileBtn) homeProfileBtn.addEventListener('click',()=>openHomePanelNav(profilePanel));
 if(homeRankBtn) homeRankBtn.addEventListener('click',()=>openHomePanelNav(rankPanel));
-if(homeClanBtn) homeClanBtn.addEventListener('click',()=>{openHomePanelNav(clanPanel); if(window.tomtomLoadClan)window.tomtomLoadClan();});
 if(homeSettingsBtn) homeSettingsBtn.addEventListener('click',()=>openHomePanelNav(settingsPanel));
 if(homeSettingsTile) homeSettingsTile.addEventListener('click',()=>openHomePanelNav(settingsPanel));
 
