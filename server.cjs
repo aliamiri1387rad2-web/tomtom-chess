@@ -26,7 +26,7 @@ function httpJson(res,status,obj){res.writeHead(status,{'Content-Type':'applicat
 const server=http.createServer((req,res)=>{
  const url=new URL(req.url,'http://localhost');
  if(req.method==='OPTIONS'){res.writeHead(204,{'Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'Content-Type'});return res.end()}
- if(req.method==='GET'&&url.pathname==='/health'){return httpJson(res,200,{ok:true,service:'TOMTOM CHESS',websocket:true,time:new Date().toISOString()})}
+ if(req.method==='GET'&&url.pathname==='/health'){return httpJson(res,200,{ok:true,service:'TOMTOM CHESS',version:'FINAL-GITHUB-1',websocket:true,websocketPath:'/ws',time:new Date().toISOString()})}
  if(url.pathname.startsWith('/api/')){
   let body='';req.on('data',c=>body+=c);req.on('end',()=>{
    let msg={};try{msg=body?JSON.parse(body):{}}catch{return httpJson(res,400,{error:'JSON نامعتبر'})}
@@ -92,19 +92,8 @@ const server=http.createServer((req,res)=>{
    res.writeHead(200,{'Content-Type':types[ext]||'application/octet-stream','Cache-Control':'no-store'});res.end(data)
  })
 });
-// WebSocket is handled explicitly so the Render proxy and Node agree on the /ws upgrade.
-const wss=new WebSocket.Server({noServer:true});
-server.on('upgrade',(req,socket,head)=>{
-  const u=new URL(req.url,'http://localhost');
-  console.log('WS upgrade request:',u.pathname,req.headers.upgrade||'');
-  if(u.pathname!=='/ws'){
-    try{socket.write('HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n')}catch(_){}
-    try{socket.destroy()}catch(_){}
-    return;
-  }
-  wss.handleUpgrade(req,socket,head,ws=>wss.emit('connection',ws,req));
-});
-wss.on('connection',(ws,req)=>{console.log('WS connected:',req.url)});
+// WebSocket endpoint: use the standard ws + HTTP-server integration documented by Render.
+const wss=new WebSocket.Server({server,path:'/ws'});
 // One in-memory lobby/room registry is safe only while this service has one
 // active process/instance. render.yaml pins this service to one instance.
 const heartbeat=setInterval(()=>{
@@ -147,7 +136,8 @@ wss.on('connection',ws=>{
  ws.isAlive=true;ws.room=null;ws.color=null;ws.name='PLAYER';ws.username='';ws.__matchReqId=null;
  ws.on('pong',()=>{ws.isAlive=true});
  ws.on('error',()=>{});
- send(ws,{type:'connected'});
+ console.log('WS connected on /ws');
+ send(ws,{type:'connected',serverVersion:'FINAL-GITHUB-1'});
  ws.on('message',raw=>{
   let msg;try{msg=JSON.parse(raw.toString())}catch(_){return}
   const reqId=msg.reqId||null;

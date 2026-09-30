@@ -995,7 +995,7 @@ function connectOnline(){
   ws.addEventListener('close',ev=>{clearTimeout(failTimer);online.connected=false;online.serverReady=false;online.started=false;if(online.ws===ws)online.ws=null;const detail=ev&&ev.code?` (${ev.code}${ev.reason?': '+ev.reason:''})`:'';$('onlineState').textContent='اتصال قطع شد'+detail;$('onlineDot').classList.remove('connected');if(window.__onlinePending){for(const k of Object.keys(window.__onlinePending)){try{window.__onlinePending[k].reject(new Error('اتصال WebSocket قطع شد.'))}catch(_){}delete window.__onlinePending[k]}}});
   ws.addEventListener('error',()=>{$('onlineState').textContent='خطا در WebSocket؛ اتصال WSS برقرار نشد.'});
   ws.addEventListener('message',ev=>{let m;try{m=JSON.parse(ev.data)}catch(_){return}
-    if(m.type==='connected'){online.serverReady=true;ws.__tomtomAppReady=true;if(ws.__tomtomReadyWaiters){const q=ws.__tomtomReadyWaiters.splice(0);q.forEach(fn=>{try{fn()}catch(_){}})}$('onlineState').textContent='متصل به سرور'}
+    if(m.type==='connected'){online.serverVersion=m.serverVersion||'unknown';online.serverReady=true;ws.__tomtomAppReady=true;if(ws.__tomtomReadyWaiters){const q=ws.__tomtomReadyWaiters.splice(0);q.forEach(fn=>{try{fn()}catch(_){}})}$('onlineState').textContent='متصل به سرور'}
     else if(m.type==='room_created'||m.type==='room_joined'){
       online.room=m.room;online.color=m.color;online.started=false;
       $('roomCode').value=m.room;
