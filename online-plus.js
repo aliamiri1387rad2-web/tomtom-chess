@@ -9,7 +9,6 @@
  function applyUser(u){
    if(!u)return;
    profile={...profile,...u};profile.name=u.name||profile.name;saveProfileData();
-   if(typeof window.updateTomtomRankUI==='function') window.updateTomtomRankUI(u.rating);
    $('authState').textContent=`${u.name} • ${u.rating}`;$('authState').classList.add('auth-user');$('authDot').classList.add('connected');
    $('authName').value=u.name||'';$('authUsername').value=u.username||'';
  }
@@ -17,27 +16,19 @@
  async function register(){try{const d=await request('/api/register',{method:'POST',body:JSON.stringify({name:$('authName').value.trim(),username:$('authUsername').value.trim(),password:$('authPassword').value})});account.token=d.token;account.username=d.user.username;localStorage.setItem('tomtom_token',account.token);localStorage.setItem('tomtom_username',account.username);applyUser(d.user);setAuthMessage('ثبت‌نام با موفقیت انجام شد.')}catch(e){setAuthMessage(e.message)}}
  async function login(){try{const d=await request('/api/login',{method:'POST',body:JSON.stringify({username:$('authUsername').value.trim(),password:$('authPassword').value})});account.token=d.token;account.username=d.user.username;localStorage.setItem('tomtom_token',account.token);localStorage.setItem('tomtom_username',account.username);applyUser(d.user);setAuthMessage('ورود موفق بود.')}catch(e){setAuthMessage(e.message)}}
  function logout(){account.token='';account.username='';localStorage.removeItem('tomtom_token');localStorage.removeItem('tomtom_username');$('authState').textContent='مهمان';$('authState').classList.remove('auth-user');$('authDot').classList.remove('connected');setAuthMessage('از حساب خارج شدید.')}
- const RANKS=[
-  {key:'bronze',fa:'برنز',en:'BRONZE',min:0,max:799,range:'0–799'},
-  {key:'silver',fa:'نقره‌ای',en:'SILVER',min:800,max:999,range:'800–999'},
-  {key:'gold',fa:'طلایی',en:'GOLD',min:1000,max:1199,range:'1000–1199'},
-  {key:'platinum',fa:'پلاتینیوم',en:'PLATINUM',min:1200,max:1399,range:'1200–1399'},
-  {key:'diamond',fa:'الماس',en:'DIAMOND',min:1400,max:1599,range:'1400–1599'},
-  {key:'master',fa:'مستر',en:'MASTER',min:1600,max:1799,range:'1600–1799'},
-  {key:'grandmaster',fa:'گرندمستر',en:'GRANDMASTER',min:1800,max:1999,range:'1800–1999'},
-  {key:'champion',fa:'قهرمان',en:'CHAMPION',min:2000,max:Infinity,range:'2000+'}
- ];
- function rankOf(rating){const n=Math.max(0,Number(rating)||0);return RANKS.find(r=>n>=r.min&&n<=r.max)||RANKS[0]}
- window.updateTomtomRankUI=function(rating){
-   const r=rankOf(rating);
-   const hb=$('homeRankBadge'),hn=$('homeRankName');
-   if(hb){hb.src='/ranks/'+r.key+'.svg';hb.alt=r.fa}
-   if(hn)hn.textContent=r.en;
-   const card=$('currentRankCard');
-   if(card)card.innerHTML=`<img src="/ranks/${r.key}.svg" alt="${r.fa}"><div class="rank-copy"><b>${r.fa}</b><small>${r.en} • ${r.range} RATING</small></div><div class="rank-rating">${nFmt(rating)}<small>RATING</small></div>`;
- };
- function nFmt(x){return Number(x)||0}
- async function leaderboard(){const box=$('leaderboard');box.innerHTML='<div class="room-message">در حال دریافت…</div>';try{const d=await request('/api/leaderboard');box.innerHTML=d.players.length?d.players.map(p=>{const r=rankOf(p.rating);return `<div class="rank-row"><div class="rank">#${p.rank}</div><img class="rank-logo" src="/ranks/${r.key}.svg" alt="${r.fa}"><div class="who"><b>${escapeHtml(p.name)}</b><small>${r.fa} • ${r.en} • سطح ${p.level} • ${p.wins} برد</small></div><div class="rr">${p.rating}</div></div>`}).join(''):'<div class="room-message">هنوز بازیکنی ثبت نشده است.</div>'}catch(e){box.innerHTML='<div class="room-message">'+escapeHtml(e.message)+'</div>'}}
+const LEAGUES=[
+ {key:'bronze',name:'برنز',min:0,max:799},
+ {key:'silver',name:'نقره‌ای',min:800,max:999},
+ {key:'gold',name:'طلایی',min:1000,max:1199},
+ {key:'platinum',name:'پلاتینیوم',min:1200,max:1399},
+ {key:'diamond',name:'الماس',min:1400,max:1599},
+ {key:'master',name:'مستر',min:1600,max:1799},
+ {key:'grandmaster',name:'گرندمستر',min:1800,max:1999},
+ {key:'champion',name:'قهرمان',min:2000,max:null}
+];
+function leagueForRating(r){const n=Number(r)||0;return LEAGUES.find(x=>n>=x.min&&(x.max===null||n<=x.max))||LEAGUES[0]}
+function leagueIcon(key){return `<img class="league-badge-img" src="/assets/leagues/${key}.svg" alt="">`}
+ async function leaderboard(){const box=$('leaderboard');box.innerHTML='<div class="room-message">در حال دریافت…</div>';try{const d=await request('/api/leaderboard');box.innerHTML=d.players.length?d.players.map(p=>`<div class="rank-row"><div class="rank">#${p.rank}</div><div class="who"><b>${escapeHtml(p.name)}</b><small>${leagueIcon((p.league?.key||leagueForRating(p.rating).key))}${escapeHtml(p.league?.name||leagueForRating(p.rating).name)} • سطح ${p.level} • ${p.wins} برد</small></div><div class="rr">${p.rating}</div></div>`).join(''):'<div class="room-message">هنوز بازیکنی ثبت نشده است.</div>'}catch(e){box.innerHTML='<div class="room-message">'+escapeHtml(e.message)+'</div>'}}
  async function savedGames(){const box=$('savedGames'),a=authUser();if(!a){box.innerHTML='<div class="room-message">برای دیدن بازی‌ها وارد حساب شوید.</div>';return}try{const d=await request(`/api/games?username=${encodeURIComponent(a.username)}&token=${encodeURIComponent(a.token)}`);box.innerHTML=d.games.length?d.games.map(g=>`<div class="saved-game"><b>${g.result==='win'?'🏆 برد':g.result==='loss'?'باخت':'مساوی'}</b> • ${g.moves.length} حرکت<small>${new Date(g.createdAt).toLocaleString('fa-IR')}</small></div>`).join(''):'<div class="room-message">بازی ذخیره‌شده‌ای ندارید.</div>'}catch(e){box.innerHTML='<div class="room-message">'+escapeHtml(e.message)+'</div>'}}
  function escapeHtml(x){return String(x).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
  async function syncResult(result){const a=authUser();if(!a)return;try{const d=await request('/api/result',{method:'POST',body:JSON.stringify({...a,result})});applyUser(d.user);await request('/api/game',{method:'POST',body:JSON.stringify({...a,game:{players:[a.username],result,moves:moveLog}})});}catch(e){console.warn('online result',e.message)}}
@@ -63,13 +54,11 @@
 
  // Add identity to room creation/join payloads by wrapping the socket send path is not necessary for gameplay,
  // but the server stores the display name already. Matchmaking uses the current profile directly.
- $('loginBtn').addEventListener('click',()=>{ if(typeof openHomePanelNav==='function') { openHomePanelNav(accountPanel); } else { accountPanel.classList.add('show');accountPanel.setAttribute('aria-hidden','false'); } });
  $('closeAccount').addEventListener('click',()=>{ if(typeof closeCurrentPanel==='function') closeCurrentPanel(); else { accountPanel.classList.remove('show');accountPanel.setAttribute('aria-hidden','true'); } });
  $('registerBtn').addEventListener('click',register);$('loginBtn2').addEventListener('click',login);$('logoutBtn').addEventListener('click',logout);
- $('rankBtn').addEventListener('click',()=>{ if(typeof openHomePanelNav==='function') openHomePanelNav(rankPanel); else { rankPanel.classList.add('show');rankPanel.setAttribute('aria-hidden','false'); } leaderboard();savedGames() });
+
  $('closeRank').addEventListener('click',()=>{ if(typeof closeCurrentPanel==='function') closeCurrentPanel(); else { rankPanel.classList.remove('show');rankPanel.setAttribute('aria-hidden','true'); } });$('refreshRank').addEventListener('click',()=>{leaderboard();savedGames()});$('matchmakeBtn').addEventListener('click',matchmake);
  if(account.token&&account.username){request('/api/leaderboard').then(()=>request('/api/games?username='+encodeURIComponent(account.username)+'&token='+encodeURIComponent(account.token))).catch(()=>{})}
- if(typeof window.updateTomtomRankUI==='function') window.updateTomtomRankUI(profile.rating);
  window.tomtomAuth=authUser;
 })();
 
@@ -88,5 +77,4 @@
  const timer=setInterval(()=>{ state.textContent=(online.connected?'آنلاین':'آماده'); },700);
  window.addEventListener('beforeunload',()=>clearInterval(timer));
 })();
-
 

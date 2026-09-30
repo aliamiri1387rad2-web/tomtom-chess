@@ -28,16 +28,32 @@ function closeAllPanels(){
 function showHome(){
   closeAllPanels();
   document.body.classList.add('home-mode');
-  document.body.classList.remove('game-mode');
+  document.body.classList.remove('game-mode','online-game','offline-game');
   if (homeScreen) homeScreen.setAttribute('aria-hidden','false');
   if (gameScreen) gameScreen.setAttribute('aria-hidden','true');
 }
-function showGameScreen(){
+function showGameScreen(gameType='offline'){
   closeAllPanels();
+  document.body.classList.toggle('online-game',gameType==='online');
+  document.body.classList.toggle('offline-game',gameType!=='online');
+  if (gameScreen) gameScreen.dataset.gameType=gameType;
   document.body.classList.remove('home-mode');
   document.body.classList.add('game-mode');
   if (homeScreen) homeScreen.setAttribute('aria-hidden','true');
   if (gameScreen) gameScreen.setAttribute('aria-hidden','false');
+  const hk=document.querySelector('.hero-kicker'), hh=document.querySelector('.hero h1'), hp=document.querySelector('.hero p');
+  if(gameType==='online'){
+    if(hk)hk.textContent='TOMTOM ARENA';
+    if(hh)hh.innerHTML='نبرد آنلاین <span>با حریف واقعی.</span>';
+    if(hp)hp.textContent='این صفحه فقط برای بازی آنلاین، حرکت حریف و چت زنده است.';
+    if(footerEl)footerEl.textContent='TOMTOM ARENA • بازی آنلاین';
+  }else{
+    if(hk)hk.textContent='MASTER THE BOARD';
+    if(hh)hh.innerHTML='آرام بازی کن، <span>دقیق فکر کن.</span>';
+    if(hp)hp.textContent='بازی آفلاین با کامپیوتر یا بازی با دوست روی همین گوشی.';
+    if(footerEl)footerEl.textContent=soundOn?'TOMTOM CHESS PRO • صدا روشن است.':'TOMTOM CHESS PRO • صدا خاموش است.';
+  }
+  syncGameModeUI();
   requestAnimationFrame(()=>{ if(board && board.length===8) render(); updateClocks(); });
 }
 function openHomePanel(panel){
@@ -59,8 +75,7 @@ function openHomePanel(panel){
 let tomtomNavReady=false;
 function navState(){ return window.history.state?.tomtom || null; }
 function goHomeFromGame(){
-  if(online && (online.connected||online.room)) leaveOnlineSession();
-  if(navState()==='game'){ window.history.back(); return; }
+  if(navState()==='game-online'||navState()==='game-offline'||navState()==='game'){ window.history.back(); return; }
   showHome();
 }
 function openHomePanelNav(panel){
@@ -68,13 +83,15 @@ function openHomePanelNav(panel){
   window.history.pushState({tomtom:key},'',location.href);
   openHomePanel(panel);
 }
-function enterGameNav(){
-  window.history.pushState({tomtom:'game'},'',location.href);
-  showGameScreen();
+function enterGameNav(gameType='offline'){
+  const state=gameType==='online'?'game-online':'game-offline';
+  window.history.pushState({tomtom:state},'',location.href);
+  showGameScreen(gameType);
 }
 window.addEventListener('popstate',()=>{
   const st=navState();
-  if(st==='game'){ showGameScreen(); }
+  if(st==='game-online'){ showGameScreen('online'); }
+  else if(st==='game-offline'||st==='game'){ showGameScreen('offline'); }
   else if(st==='online'){ openHomePanel(onlinePanel); }
   else if(st==='profile'){ openHomePanel(profilePanel); }
   else if(st==='rank'){ openHomePanel(rankPanel); }
@@ -89,7 +106,6 @@ let castling = null;
 let enPassant = null;
 let gameOver = false;
 let soundOn = true;
-let musicOn = true;
 let audioUnlocked = false;
 let masterVolume = 0.70;
 let computerTimer = null;
@@ -811,19 +827,6 @@ const avatarSelect=document.getElementById('avatarSelect');
 const whitePlayer=document.getElementById('whitePlayer');
 const blackPlayer=document.getElementById('blackPlayer');
 const blackLabel=document.getElementById('blackLabel');
-const whiteLabel=document.getElementById('whiteLabel');
-function updateOpponentPresence(players){
-  const list=Array.isArray(players)?players:[];
-  const w=list.find(p=>p.color==='w');
-  const b=list.find(p=>p.color==='b');
-  const set=(color,p)=>{
-    const label=document.getElementById(color==='w'?'whiteLabel':'blackLabel');
-    const el=document.getElementById(color==='w'?'whitePresence':'blackPresence');
-    if(label && p?.name) label.textContent=p.name;
-    if(el){const on=!!p;el.classList.toggle('offline',!on);el.innerHTML='<i></i> '+(on?'آنلاین':'آفلاین');}
-  };
-  set('w',w); set('b',b);
-}
 
 function loadProfile(){
   try{
@@ -839,7 +842,6 @@ function saveProfileData(){
   if(pa)pa.textContent=profile.avatar;
   if(rating)rating.textContent=profile.rating;
   if(xp)xp.textContent=profile.xp;
-  if(typeof window.updateTomtomRankUI==='function') window.updateTomtomRankUI(profile.rating);
   if(level)level.textContent=profile.level;
   for(const [id,val] of [['wins',profile.wins],['losses',profile.losses],['draws',profile.draws]]){const el=document.getElementById(id);if(el)el.textContent=val}
 }
@@ -900,12 +902,11 @@ function playTone(kind){
     if(kind==='win'){hit(.16,.8);hit(.32,.65)}
   }catch(_){}
 }
-function unlockAudio(){if(audioUnlocked)return;audioUnlocked=true;try{const ctx=ensureAudio();if(ctx){const o=ctx.createOscillator(),g=ctx.createGain();g.gain.setValueAtTime(0.0001,ctx.currentTime);o.connect(g);g.connect(ctx.destination);o.start();o.stop(ctx.currentTime+0.02)}}catch(_){};if(musicOn)setMusic(true);}
+function unlockAudio(){if(audioUnlocked)return;audioUnlocked=true;try{const ctx=ensureAudio();if(ctx){const o=ctx.createOscillator(),g=ctx.createGain();g.gain.setValueAtTime(0.0001,ctx.currentTime);o.connect(g);g.connect(ctx.destination);o.start();o.stop(ctx.currentTime+0.02)}}catch(_){};}
 
 
 function applyAudioSettings(){
-  const musicEl=document.getElementById('musicEnabled'), volEl=document.getElementById('masterVolume'), volOut=document.getElementById('masterVolumeValue');
-  if(musicEl) musicEl.checked=false;
+  const volEl=document.getElementById('masterVolume'), volOut=document.getElementById('masterVolumeValue');
   if(volEl) volEl.value=Math.round(masterVolume*100);
   if(volOut) volOut.value=Math.round(masterVolume*100)+'٪';
 }
@@ -917,18 +918,12 @@ function loadAudioSettings(){
       masterVolume=Math.max(0,Math.min(1,Number(raw.volume)||.7));
     }
   }catch(_){ soundOn=true; }
-  musicOn=false;
   applyAudioSettings();
   if(soundBtn) soundBtn.textContent=soundOn?'🔊':'🔇';
 }
 function saveAudioSettings(){
   try{localStorage.setItem('tomtom_audio',JSON.stringify({soundOn,volume:masterVolume}));}catch(_){}
   applyAudioSettings();
-}
-function setMusic(on){
-  musicOn=false;
-  const m=window.tomtomPiano;
-  if(m){try{m.pause();m.currentTime=0;}catch(_) {}}
 }
 loadAudioSettings();
 
@@ -946,22 +941,27 @@ function closeCurrentPanel(){
 if(againBtn)againBtn.addEventListener('click',resetGame);
 const closeModalBtn=document.getElementById('closeModal');if(closeModalBtn)closeModalBtn.addEventListener('click',hideModal);
 const pauseBtn=document.getElementById('pauseBtn'),resumeBtn=document.getElementById('resumeBtn'),pauseOverlay=document.getElementById('pauseOverlay');
-if(pauseBtn)pauseBtn.addEventListener('click',()=>{if(gameOver)return;paused=true;stopClock();pauseOverlay?.classList.add('show')});
-if(resumeBtn)resumeBtn.addEventListener('click',()=>{paused=false;pauseOverlay?.classList.remove('show');startClock();render()});
+// No pause/undo controls in the game UI.
+if(pauseBtn) pauseBtn.remove();
+if(resumeBtn) resumeBtn.remove();
+if(pauseOverlay) pauseOverlay.remove();
+const undoBtn=document.getElementById('undoBtn');
+if(undoBtn) undoBtn.remove();
 if(soundBtn)soundBtn.addEventListener('click',()=>{ensureAudio();soundOn=!soundOn;soundBtn.textContent=soundOn?'🔊':'🔇';footerEl.textContent=soundOn?'TOMTOM CHESS PRO • صدا روشن است.':'TOMTOM CHESS PRO • صدا خاموش است.';if(soundOn)playTone('pick');saveAudioSettings()});
-const flipBtn=document.getElementById('flipBtn');if(flipBtn)flipBtn.addEventListener('click',()=>{boardFlipped=!boardFlipped;render()});
-const undoBtn=document.getElementById('undoBtn');if(undoBtn)undoBtn.addEventListener('click',()=>{
-  if(!moveHistory.length || online.connected) return;
-  let h=moveHistory.pop();
-  board=h.board;turn=h.turn;castling=h.castling;enPassant=h.enPassant;clockSeconds=h.clockSeconds;lastMove=h.lastMove;halfmoveClock=h.halfmoveClock||0;repetitionCounts={...(h.repetitionCounts||{})};moveLog.pop();
-  // In computer mode, undo both the computer reply and the player's last move.
-  if(modeEl.value==='computer' && turn==='b' && moveHistory.length){
-    h=moveHistory.pop();
-    board=h.board;turn=h.turn;castling=h.castling;enPassant=h.enPassant;clockSeconds=h.clockSeconds;lastMove=h.lastMove;halfmoveClock=h.halfmoveClock||0;repetitionCounts={...(h.repetitionCounts||{})};
-    moveLog.pop();
-  }
-  selected=null;gameOver=false;gameResultAwarded=false;render();updateClocks();updateStatus();startClock();
-});
+const whiteViewBtn=document.getElementById('whiteViewBtn');
+const blackViewBtn=document.getElementById('blackViewBtn');
+const chatFocusBtn=document.getElementById('chatFocusBtn');
+if(whiteViewBtn)whiteViewBtn.addEventListener('click',()=>{boardFlipped=false;render();});
+if(blackViewBtn)blackViewBtn.addEventListener('click',()=>{boardFlipped=true;render();});
+if(chatFocusBtn)chatFocusBtn.addEventListener('click',()=>{document.getElementById('chatInput')?.focus();});
+document.getElementById('chatMessages')?.addEventListener('click',()=>document.getElementById('chatInput')?.focus());
+function syncGameModeUI(){
+  const onlineMode=document.body.classList.contains('online-game');
+  document.querySelectorAll('.offline-only-controls,.offline-only').forEach(el=>el.hidden=onlineMode);
+  document.querySelectorAll('.online-toolbar').forEach(el=>el.hidden=!onlineMode);
+  const onlineChat=document.getElementById('onlineChatTopBtn');
+  if(onlineChat) onlineChat.onclick=()=>document.getElementById('chatInput')?.focus();
+}
 const settingsBtn=document.getElementById('settingsBtn');if(settingsBtn)settingsBtn.addEventListener('click',()=>showPanel(settingsPanel));
 const closeSettingsBtn=document.getElementById('closeSettings');if(closeSettingsBtn)closeSettingsBtn.addEventListener('click',closeCurrentPanel);
 const closeProfileBtn=document.getElementById('closeProfile');if(closeProfileBtn)closeProfileBtn.addEventListener('click',closeCurrentPanel);
@@ -973,7 +973,7 @@ const AI_NOTES={weak:'ضعیف: حرکت‌های ساده و سریع.',medium:
 function updateAILevelNote(){if(aiLevelNote)aiLevelNote.textContent=AI_NOTES[aiLevelEl?.value||aiLevel]||'';}
 if(aiLevelEl){aiLevelEl.value=aiLevel;aiLevelEl.addEventListener('change',()=>{aiLevel=aiLevelEl.value;updateAILevelNote();});}
 updateAILevelNote();
-const musicEnabledEl=document.getElementById('musicEnabled');const masterVolumeEl=document.getElementById('masterVolume');const masterVolumeValue=document.getElementById('masterVolumeValue');if(masterVolumeEl)masterVolumeEl.addEventListener('input',()=>{masterVolume=Math.max(0,Math.min(1,Number(masterVolumeEl.value)/100));if(masterVolumeValue)masterVolumeValue.value=Math.round(masterVolume*100)+'٪';applyAudioSettings();});if(musicEnabledEl)musicEnabledEl.addEventListener('change',()=>{musicEnabledEl.checked=false;musicOn=false;setMusic(false);});const saveSettingsBtn=document.getElementById('saveSettings');if(saveSettingsBtn)saveSettingsBtn.addEventListener('click',()=>{timeControlSeconds=Number(document.getElementById('timeControl')?.value)||600;pieceSet=document.getElementById('pieceSet')?.value||'classic';smartMode=!!document.getElementById('smartMode')?.checked;aiLevel=aiLevelEl?.value||'medium';musicOn=false;saveAudioSettings();settingsPanel.classList.remove('show');settingsPanel.setAttribute('aria-hidden','true');resetGame()});
+const masterVolumeEl=document.getElementById('masterVolume');const masterVolumeValue=document.getElementById('masterVolumeValue');if(masterVolumeEl)masterVolumeEl.addEventListener('input',()=>{masterVolume=Math.max(0,Math.min(1,Number(masterVolumeEl.value)/100));if(masterVolumeValue)masterVolumeValue.value=Math.round(masterVolume*100)+'٪';applyAudioSettings();});const saveSettingsBtn=document.getElementById('saveSettings');if(saveSettingsBtn)saveSettingsBtn.addEventListener('click',()=>{timeControlSeconds=Number(document.getElementById('timeControl')?.value)||600;pieceSet=document.getElementById('pieceSet')?.value||'classic';smartMode=!!document.getElementById('smartMode')?.checked;aiLevel=aiLevelEl?.value||'medium';saveAudioSettings();settingsPanel.classList.remove('show');settingsPanel.setAttribute('aria-hidden','true');});
 
 
 // ===== ONLINE ARENA — CLEAN REBUILD =====
@@ -1003,14 +1003,12 @@ function handleOnlineMessage(ws,m){
     const rc=document.getElementById('roomCode');if(rc)rc.value=m.room;
     const box=document.getElementById('roomMessage');if(box)box.textContent=m.type==='room_created'?'اتاق '+m.room+' ساخته شد؛ کد را برای بازیکن دوم بفرستید.':'با موفقیت وارد اتاق '+m.room+' شدید؛ منتظر حریف…';
     const cs=document.getElementById('chatState');if(cs)cs.textContent='منتظر';
-    updateOpponentPresence([{color:m.color,name:profile.name}]);
   }else if(m.type==='room_state'){
     const wasStarted=online.started;
     online.room=m.room;online.started=!!m.started;
     const rc=document.getElementById('roomCode');if(rc)rc.value=m.room;
     const box=document.getElementById('roomMessage');if(box)box.textContent=m.started?'هر دو بازیکن آماده‌اند؛ بازی شروع شده است.':'منتظر بازیکن دوم…';
     const cs=document.getElementById('chatState');if(cs)cs.textContent=m.started?'آنلاین':'منتظر';
-    updateOpponentPresence(m.players||[]);
     const sb=document.getElementById('startOnlineGame');if(sb){sb.style.display=(!m.started&&m.players&&m.players.length>=2)?'block':'none';sb.disabled=!(m.players&&m.players.length>=2);}
     if(m.started&&!wasStarted) resetGame();
   }else if(m.type==='game_started'){
@@ -1020,7 +1018,7 @@ function handleOnlineMessage(ws,m){
     const cs=document.getElementById('chatState');if(cs)cs.textContent='آنلاین';
     // The online panel is only the lobby. When the server starts the match,
     // actually switch both players into the chess screen before resetting it.
-    if(navState()!=='game') enterGameNav(); else showGameScreen();
+    if(navState()!=='game-online') enterGameNav('online'); else showGameScreen('online');
     resetGame();
   }else if(m.type==='match_found'){
     online.room=m.room;online.color=m.color;online.started=true;window.__tomtomSearching=false;
@@ -1028,8 +1026,7 @@ function handleOnlineMessage(ws,m){
     const rc=document.getElementById('roomCode');if(rc)rc.value=m.room;
     const box=document.getElementById('roomMessage');if(box)box.textContent='حریف پیدا شد؛ '+(m.color==='w'?'شما سفید هستید.':'شما سیاه هستید.');
     const cs=document.getElementById('chatState');if(cs)cs.textContent='آنلاین';
-    updateOpponentPresence([{color:m.color,name:profile.name},{color:m.color==='w'?'b':'w',name:m.color==='w'?'PLAYER 2':'PLAYER 1'}]);
-    if(navState()!=='game') enterGameNav(); else showGameScreen();
+    if(navState()!=='game-online') enterGameNav('online'); else showGameScreen('online');
     resetGame();
   }else if(m.type==='match_waiting'){
     const box=document.getElementById('roomMessage');if(box)box.textContent='⏳ در صف پیدا کردن حریف…';
@@ -1042,7 +1039,7 @@ function handleOnlineMessage(ws,m){
   else if(m.type==='resigned'){online.started=false;const box=document.getElementById('roomMessage');if(box)box.textContent='حریف تسلیم شد.'}
   else if(m.type==='chat'&&m.color!==online.color){addChat(m.name||'حریف',m.text,false)}
   else if(m.type==='opponent_left'){
-    online.started=false;online.room=null;online.color=null;const sb=document.getElementById('startOnlineGame');if(sb)sb.style.display='none';const box=document.getElementById('roomMessage');if(box)box.textContent='حریف از اتاق خارج شد.';const cs=document.getElementById('chatState');if(cs)cs.textContent='آفلاین';updateOpponentPresence([]);setTimeout(()=>{if(navState()==='game'){window.history.back();}else{showHome();}},350);
+    online.started=false;online.room=null;const sb=document.getElementById('startOnlineGame');if(sb)sb.style.display='none';const box=document.getElementById('roomMessage');if(box)box.textContent='حریف آفلاین شد.';const cs=document.getElementById('chatState');if(cs)cs.textContent='آفلاین';const dot=document.getElementById('onlineDot');if(dot)dot.classList.remove('connected');setTimeout(()=>{if(navState()==='game'){goHomeFromGame();}},250);
   }else if(m.type==='error'){
     const box=document.getElementById('roomMessage');if(box)box.textContent=m.message||'خطا از طرف سرور.';
   }
@@ -1052,6 +1049,16 @@ function handleOnlineMessage(ws,m){
     else if(['room_created','room_joined','match_found','match_waiting','match_cancelled','left_room','game_started'].includes(m.type))pending[m.reqId].resolve(m);
   }
 }
+function leaveOnlineRoom(){
+  try{
+    if(online.ws && online.ws.readyState===WebSocket.OPEN){
+      if(online.room) online.ws.send(JSON.stringify({type:'leave_room',room:online.room,reqId:'leave_'+Date.now()}));
+      setTimeout(()=>{try{online.ws&&online.ws.close(1000,'leave')}catch(_){}},80);
+    }
+  }catch(_){ }
+  online.room=null;online.started=false;online.connected=false;
+}
+window.leaveOnlineRoom=leaveOnlineRoom;
 function connectOnline(){
   if(online.ws&&[WebSocket.OPEN,WebSocket.CONNECTING].includes(online.ws.readyState))return online.ws;
   let url;try{url=onlineWsUrl()}catch(e){onlineUi(e.message||'آدرس سرور نامعتبر است.');return null}
@@ -1123,7 +1130,7 @@ function openOfflineMode(){if(offlineModeModal){document.body.classList.add('off
 function startOfflineMode(mode){
   closeOfflineMode();
   if(modeEl) modeEl.value=mode;
-  enterGameNav();
+  enterGameNav('offline');
   setTimeout(()=>resetGame(),0);
 }
 function enterOffline(){ openOfflineMode(); }
@@ -1134,19 +1141,7 @@ const cancelOfflineMode=document.getElementById('cancelOfflineMode');
 if(localTwoPlayerBtn)localTwoPlayerBtn.addEventListener('click',()=>startOfflineMode('human'));
 if(aiMatchBtn)aiMatchBtn.addEventListener('click',()=>startOfflineMode('computer'));
 if(cancelOfflineMode)cancelOfflineMode.addEventListener('click',closeOfflineMode);
-function leaveOnlineSession(){
-  try{ if(online && online.ws && online.ws.readyState===WebSocket.OPEN){ sendOnline({type:'leave_room'}); setTimeout(()=>{try{online.ws.close()}catch(_){}},120); } }catch(_){}
-  online.room=null; online.color=null; online.started=false; online.connected=false;
-}
-if(backHomeBtn) backHomeBtn.addEventListener('click',()=>{
-  if(online.connected || online.room){
-    const chat=document.querySelector('.chat-card');
-    if(chat){ chat.scrollIntoView({behavior:'smooth',block:'center'}); const input=document.getElementById('chatInput'); setTimeout(()=>input?.focus(),250); }
-    return;
-  }
-  closeOfflineMode(); hideModal(); hidePause(); closeAllPanels(); goHomeFromGame();
-});
-window.addEventListener('pagehide',leaveOnlineSession);
+if(backHomeBtn) backHomeBtn.addEventListener('click',()=>{ closeOfflineMode(); hideModal(); if(typeof leaveOnlineRoom==='function')leaveOnlineRoom(); closeAllPanels(); goHomeFromGame(); });
 if(homeOnlineBtn) homeOnlineBtn.addEventListener('click',()=>openHomePanelNav(onlinePanel));
 if(homeProfileBtn) homeProfileBtn.addEventListener('click',()=>openHomePanelNav(profilePanel));
 if(homeRankBtn) homeRankBtn.addEventListener('click',()=>openHomePanelNav(rankPanel));
@@ -1161,6 +1156,7 @@ function syncOrientationClass(){
 syncOrientationClass();
 window.addEventListener('resize',syncOrientationClass,{passive:true});
 window.addEventListener('orientationchange',()=>setTimeout(syncOrientationClass,80),{passive:true});
+window.addEventListener('pagehide',()=>{try{leaveOnlineRoom()}catch(_){}},{once:false});
 
 // Start
 blackLabel.textContent='PLAYER 2';

@@ -780,17 +780,24 @@ body.game-mode .tomtom-bg-layer .starfield{display:none!important;}
 
 .league-note{background:#111d31;border:1px solid #ffffff12;border-radius:12px;padding:9px;margin:8px 0 10px;color:#aeb9ca;font-size:10px;line-height:1.7}
 
+/* ===== CLANS / EMOJI ===== */
+.clan-card{max-height:88vh;overflow:auto}.clan-header{display:flex;gap:12px;align-items:center;padding:12px;border:1px solid rgba(255,255,255,.1);border-radius:16px;background:rgba(255,255,255,.04)}.clan-badge{width:56px;height:56px;border-radius:16px;display:grid;place-items:center;font-size:32px;background:rgba(255,255,255,.08)}.clan-header h3{margin:0 0 4px}.clan-header p,.clan-war-box p{margin:4px 0;opacity:.75}.clan-war-box{margin-top:10px;padding:12px;border-radius:16px;background:rgba(115,160,255,.08);border:1px solid rgba(115,160,255,.2)}.clan-war-box button{width:100%;margin-top:7px}.clan-members-head{display:flex;justify-content:space-between;margin:14px 2px 8px}.clan-members{display:grid;gap:7px}.clan-member,.clan-search-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 10px;border-radius:12px;background:rgba(255,255,255,.045)}.clan-member>div{margin-inline-end:auto}.clan-member small,.clan-search-row small{display:block;opacity:.65;margin-top:2px}.presence{display:block;width:9px;height:9px;border-radius:50%;background:#777}.presence.on{background:#45d483;box-shadow:0 0 8px rgba(69,212,131,.7)}.clan-form,.clan-search{display:grid;gap:8px}.clan-search{grid-template-columns:1fr auto;margin-top:10px}.clan-search-row{margin-top:7px}.emoji-row{display:flex;gap:5px;padding:5px 0}.emoji-row button{border:0;background:rgba(255,255,255,.06);border-radius:9px;padding:5px 8px;color:inherit;font-size:16px}.war-score{font-size:18px;font-weight:800;margin-top:6px}.clan-chat-messages{min-height:260px;max-height:48vh}
 
-/* S2 rank/presence UI */
-.rank-badge{display:block;object-fit:contain;filter:drop-shadow(0 7px 12px #0008)}
-.rank-badge-home{width:42px;height:42px;flex:none}
-.current-rank-card{display:flex;align-items:center;gap:14px;padding:12px 13px;margin-bottom:10px;border:1px solid #ffffff0b;background:linear-gradient(135deg,#172843,#101b2e);border-radius:16px;box-shadow:0 12px 26px #0004}
-.current-rank-card img{width:68px;height:68px;flex:none}
-.current-rank-card .rank-copy{display:flex;flex-direction:column;gap:3px;min-width:0}
-.current-rank-card .rank-copy b{font-size:18px}
-.current-rank-card .rank-copy small{color:#93a1b7;font-size:9px;letter-spacing:1px}
-.current-rank-card .rank-rating{margin-right:auto;text-align:center;color:var(--gold);font-weight:900;font-size:18px}
-.current-rank-card .rank-rating small{display:block;color:#78879d;font-size:8px;letter-spacing:1px}
-.rank-row .rank-logo{width:36px;height:36px;object-fit:contain;filter:drop-shadow(0 4px 8px #0007)}
-.player-presence{display:flex;align-items:center;gap:4px;font-size:7px;color:#49df9b;margin-top:2px}.player-presence i{width:5px;height:5px;border-radius:50%;background:#49df9b;box-shadow:0 0 7px #49df9b;display:inline-block}.player-presence.offline{color:#7c8798}.player-presence.offline i{background:#697386;box-shadow:none}
-@media(max-width:420px){.current-rank-card img{width:58px;height:58px}.rank-row{grid-template-columns:34px 38px 1fr 55px!important}.rank-row .rank-logo{width:32px;height:32px}}
+.clan-role-select{max-width:105px;padding:6px;border-radius:8px;background:rgba(255,255,255,.06);color:inherit;border:1px solid rgba(255,255,255,.1)}
+
+.chat-primary-card{min-height:320px}.chat-primary-card .chat-messages{min-height:180px;max-height:300px;cursor:text}.league-badge-img{width:28px;height:28px;vertical-align:middle;margin-inline-end:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,.35))}.bottom-tools .tool-btn{min-width:0}.bottom-tools .tool-btn span{font-size:12px}.chat-messages:focus{outline:2px solid #5aa9ff;outline-offset:-2px}
+
+/* S5 — strict separation of offline and online game screens. */
+.online-toolbar{display:none!important;align-items:center;justify-content:center;gap:10px;}
+.online-game .online-toolbar{display:flex!important;}
+.offline-game .online-toolbar{display:none!important;}
+.online-game .offline-only-controls,.online-game .offline-only{display:none!important;}
+.online-game .mode-control,.online-game #mode{display:none!important;}
+.online-game .game-side-panel .chat-card{display:flex!important;}
+.online-game .game-side-panel .compact-card,.online-game .game-side-panel .move-list{display:none!important;}
+.offline-game .game-side-panel .chat-card{display:none!important;}
+.offline-ai-setting{display:block;}
+.online-game .offline-ai-setting{display:none!important;}
+.online-game .game-side-panel .bottom-tools{display:flex!important;}
+.online-title{font-weight:900;letter-spacing:.4px;color:#e9f2ff;}
+.online-title small{display:block;font-size:9px;color:#78b7ff;margin-top:2px;text-align:center;}
