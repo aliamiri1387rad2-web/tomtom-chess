@@ -1001,6 +1001,9 @@ function handleOnlineMessage(ws,m){
     const sb=document.getElementById('startOnlineGame');if(sb)sb.style.display='none';
     const box=document.getElementById('roomMessage');if(box)box.textContent='🎮 بازی شروع شد؛ نوبت سفید است.';
     const cs=document.getElementById('chatState');if(cs)cs.textContent='آنلاین';
+    // The online panel is only the lobby. When the server starts the match,
+    // actually switch both players into the chess screen before resetting it.
+    if(navState()!=='game') enterGameNav(); else showGameScreen();
     resetGame();
   }else if(m.type==='match_found'){
     online.room=m.room;online.color=m.color;online.started=true;window.__tomtomSearching=false;
@@ -1008,6 +1011,7 @@ function handleOnlineMessage(ws,m){
     const rc=document.getElementById('roomCode');if(rc)rc.value=m.room;
     const box=document.getElementById('roomMessage');if(box)box.textContent='حریف پیدا شد؛ '+(m.color==='w'?'شما سفید هستید.':'شما سیاه هستید.');
     const cs=document.getElementById('chatState');if(cs)cs.textContent='آنلاین';
+    if(navState()!=='game') enterGameNav(); else showGameScreen();
     resetGame();
   }else if(m.type==='match_waiting'){
     const box=document.getElementById('roomMessage');if(box)box.textContent='⏳ در صف پیدا کردن حریف…';
@@ -1027,7 +1031,7 @@ function handleOnlineMessage(ws,m){
   const pending=window.__onlinePending||{};
   if(m.reqId&&pending[m.reqId]){
     if(m.type==='error')pending[m.reqId].reject(new Error(m.message||'خطای سرور'));
-    else if(['room_created','room_joined','match_found','match_waiting','match_cancelled','left_room'].includes(m.type))pending[m.reqId].resolve(m);
+    else if(['room_created','room_joined','match_found','match_waiting','match_cancelled','left_room','game_started'].includes(m.type))pending[m.reqId].resolve(m);
   }
 }
 function connectOnline(){
