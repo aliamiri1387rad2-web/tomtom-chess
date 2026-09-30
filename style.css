@@ -775,3 +775,5 @@ body.game-mode .tomtom-bg-layer .starfield{display:none!important;}
 .tomtom-bg-layer .nebula-stars::after{animation-duration:6.7s!important;animation-delay:-2.1s!important;}
 .tomtom-bg-layer.visuals-ready .nebula-stars::before,.tomtom-bg-layer.visuals-ready .nebula-stars::after{animation:nebulaStarsTwinkle 4.8s ease-in-out infinite!important;transform:none!important;background-position:0 0!important;}
 .tomtom-bg-layer.visuals-ready .nebula-stars::after{animation-duration:6.7s!important;animation-delay:-2.1s!important;}
+
+.online-start-btn{border:1px solid #e7c66a;box-shadow:0 0 18px rgba(231,198,106,.16);font-weight:800}

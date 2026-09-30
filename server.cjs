@@ -10,7 +10,7 @@ const ROOT = __dirname;
 const DIST = path.join(ROOT, 'dist');
 const rooms = new Map();
 const matchmaking = [];
-const VERSION = 'ONLINE-REBUILD-1';
+const VERSION = 'ONLINE-REBUILD-2';
 const DB_FILE = path.join(ROOT, 'tomtom-data.json');
 let db = { users: {}, games: [] };
 try { if (fs.existsSync(DB_FILE)) db = { ...db, ...JSON.parse(fs.readFileSync(DB_FILE, 'utf8')) }; } catch (_) {}
@@ -47,7 +47,7 @@ function state(room) {
   return {
     type: 'room_state',
     room: room.code,
-    started: room.players.length === 2,
+    started: !!room.started,
     players: room.players.map(p => ({ color: p.color, name: p.name, username: p.username }))
   };
 }
@@ -58,6 +58,7 @@ function leaveRoom(ws, notify) {
   ws.room = null; ws.color = null;
   if (!room) return;
   room.players = room.players.filter(p => p.ws !== ws);
+  if (room.players.length < 2) room.started = false;
   if (!room.players.length) rooms.delete(id);
   else {
     if (notify) broadcast(room, { type: 'opponent_left' });
@@ -80,7 +81,7 @@ function createRoom(ws, id, name, username, reqId) {
   if (!id) { do { id = roomCode(); } while (rooms.has(id)); }
   if (!validCode(id)) return send(ws, { type: 'error', reqId, message: 'کد اتاق باید ۳ تا ۸ حرف انگلیسی یا عدد باشد.' });
   if (rooms.has(id)) return send(ws, { type: 'error', reqId, message: 'این کد اتاق قبلاً استفاده شده است.' });
-  const room = { code: id, players: [], lastMove: null };
+  const room = { code: id, players: [], lastMove: null, started: false };
   const player = { ws, color: 'w', name: cleanName(name, 'PLAYER 1'), username: String(username || '').slice(0, 32) };
   room.players.push(player); rooms.set(id, room);
   ws.room = id; ws.color = player.color; ws.name = player.name; ws.username = player.username;
@@ -199,6 +200,14 @@ wss.on('connection', ws => {
     if (msg.type === 'leave_room') { removeQueue(ws); leaveRoom(ws, true); return send(ws, { type: 'left_room', reqId }); }
     if (msg.type === 'create_room') return createRoom(ws, String(msg.room || '').trim().toUpperCase(), msg.name, msg.username, reqId);
     if (msg.type === 'join_room') return joinRoom(ws, String(msg.room || '').trim().toUpperCase(), msg.name, msg.username, reqId);
+    if (msg.type === 'start_game') {
+      const room = roomOf(ws);
+      if (!room) return send(ws, { type: 'error', reqId, message: 'ابتدا وارد اتاق شوید.' });
+      if (room.players.length < 2) return send(ws, { type: 'error', reqId, message: 'برای شروع باید هر دو بازیکن وارد اتاق باشند.' });
+      room.started = true; room.lastMove = null;
+      broadcast(room, { type: 'game_started', room: room.code });
+      return send(ws, { type: 'game_started', reqId, room: room.code });
+    }
     const room = roomOf(ws);
     if (!room) return send(ws, { type: 'error', reqId, message: 'ابتدا یک اتاق بسازید یا وارد اتاق شوید.' });
     if (msg.type === 'move') {
@@ -206,7 +215,7 @@ wss.on('connection', ws => {
       room.lastMove = msg.move || null;
       return broadcast(room, { type: 'remote_move', move: room.lastMove, color: ws.color }, ws);
     }
-    if (msg.type === 'new_game') { room.lastMove = null; return broadcast(room, { type: 'new_game' }, ws); }
+    if (msg.type === 'new_game') { room.lastMove = null; room.started = true; return broadcast(room, { type: 'new_game' }, ws); }
     if (msg.type === 'resign') return broadcast(room, { type: 'resigned', color: ws.color }, ws);
     if (msg.type === 'chat') {
       const text = String(msg.text || '').trim().slice(0, 180); if (!text) return;

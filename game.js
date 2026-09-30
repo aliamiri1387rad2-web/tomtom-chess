@@ -989,10 +989,19 @@ function handleOnlineMessage(ws,m){
     const box=document.getElementById('roomMessage');if(box)box.textContent=m.type==='room_created'?'اتاق '+m.room+' ساخته شد؛ کد را برای بازیکن دوم بفرستید.':'با موفقیت وارد اتاق '+m.room+' شدید؛ منتظر حریف…';
     const cs=document.getElementById('chatState');if(cs)cs.textContent='منتظر';
   }else if(m.type==='room_state'){
+    const wasStarted=online.started;
     online.room=m.room;online.started=!!m.started;
     const rc=document.getElementById('roomCode');if(rc)rc.value=m.room;
-    const box=document.getElementById('roomMessage');if(box)box.textContent=m.started?'حریف وارد شد؛ بازی شروع شد.':'منتظر بازیکن دوم…';
+    const box=document.getElementById('roomMessage');if(box)box.textContent=m.started?'هر دو بازیکن آماده‌اند؛ بازی شروع شده است.':'منتظر بازیکن دوم…';
     const cs=document.getElementById('chatState');if(cs)cs.textContent=m.started?'آنلاین':'منتظر';
+    const sb=document.getElementById('startOnlineGame');if(sb){sb.style.display=(!m.started&&m.players&&m.players.length>=2)?'block':'none';sb.disabled=!(m.players&&m.players.length>=2);}
+    if(m.started&&!wasStarted) resetGame();
+  }else if(m.type==='game_started'){
+    online.started=true;
+    const sb=document.getElementById('startOnlineGame');if(sb)sb.style.display='none';
+    const box=document.getElementById('roomMessage');if(box)box.textContent='🎮 بازی شروع شد؛ نوبت سفید است.';
+    const cs=document.getElementById('chatState');if(cs)cs.textContent='آنلاین';
+    resetGame();
   }else if(m.type==='match_found'){
     online.room=m.room;online.color=m.color;online.started=true;window.__tomtomSearching=false;
     const mm=document.getElementById('matchmakeBtn');if(mm)mm.textContent='⚡ بازی سریع با حریف تصادفی';
@@ -1011,7 +1020,7 @@ function handleOnlineMessage(ws,m){
   else if(m.type==='resigned'){online.started=false;const box=document.getElementById('roomMessage');if(box)box.textContent='حریف تسلیم شد.'}
   else if(m.type==='chat'&&m.color!==online.color){addChat(m.name||'حریف',m.text,false)}
   else if(m.type==='opponent_left'){
-    online.started=false;const box=document.getElementById('roomMessage');if(box)box.textContent='حریف از اتاق خارج شد.';const cs=document.getElementById('chatState');if(cs)cs.textContent='منتظر';
+    online.started=false;const sb=document.getElementById('startOnlineGame');if(sb)sb.style.display='none';const box=document.getElementById('roomMessage');if(box)box.textContent='حریف از اتاق خارج شد.';const cs=document.getElementById('chatState');if(cs)cs.textContent='منتظر';
   }else if(m.type==='error'){
     const box=document.getElementById('roomMessage');if(box)box.textContent=m.message||'خطا از طرف سرور.';
   }
@@ -1066,6 +1075,15 @@ const testServerBtn=document.getElementById('testServer');if(testServerBtn)testS
 const closeOnlineBtn=document.getElementById('closeOnline');if(closeOnlineBtn)closeOnlineBtn.addEventListener('click',closeCurrentPanel);
 const hostRoomBtn=document.getElementById('hostRoom');if(hostRoomBtn)hostRoomBtn.addEventListener('click',async()=>{const input=document.getElementById('roomCode'),box=document.getElementById('roomMessage');let code=(input.value||'').trim().toUpperCase();if(!code)code=makeRoomCode();if(!/^[A-Z0-9]{3,8}$/.test(code)){box.textContent='کد اتاق باید ۳ تا ۸ حرف انگلیسی یا عدد باشد.';return}input.value=code;box.textContent='در حال ساخت اتاق…';hostRoomBtn.disabled=true;try{await onlineRequest('create_room',{room:code,name:profile.name,username:localStorage.getItem('tomtom_username')||''})}catch(e){box.textContent=e.message||'ساخت اتاق انجام نشد.'}finally{hostRoomBtn.disabled=false}});
 const joinRoomBtn=document.getElementById('joinRoom');if(joinRoomBtn)joinRoomBtn.addEventListener('click',async()=>{const input=document.getElementById('roomCode'),box=document.getElementById('roomMessage'),code=(input.value||'').trim().toUpperCase();if(!code){box.textContent='کد اتاق را وارد کنید.';return}if(!/^[A-Z0-9]{3,8}$/.test(code)){box.textContent='کد اتاق نامعتبر است.';return}input.value=code;box.textContent='در حال ورود به اتاق…';joinRoomBtn.disabled=true;try{await onlineRequest('join_room',{room:code,name:profile.name,username:localStorage.getItem('tomtom_username')||''})}catch(e){box.textContent=e.message||'ورود به اتاق انجام نشد.'}finally{joinRoomBtn.disabled=false}});
+const startOnlineGameBtn=document.getElementById('startOnlineGame');
+if(startOnlineGameBtn)startOnlineGameBtn.addEventListener('click',async()=>{
+  const box=document.getElementById('roomMessage');
+  if(!online.room){if(box)box.textContent='ابتدا اتاق را بسازید یا وارد شوید.';return}
+  startOnlineGameBtn.disabled=true;
+  if(box)box.textContent='در حال شروع بازی…';
+  try{await onlineRequest('start_game',{room:online.room},10000);}
+  catch(e){startOnlineGameBtn.disabled=false;if(box)box.textContent=e.message||'شروع بازی انجام نشد.';}
+});
 const copyRoomBtn=document.getElementById('copyRoom');if(copyRoomBtn)copyRoomBtn.addEventListener('click',()=>navigator.clipboard?.writeText(document.getElementById('roomCode').value).then(()=>document.getElementById('roomMessage').textContent='کد اتاق کپی شد.').catch(()=>{}));
 
 // ===== HOME SCREEN =====
