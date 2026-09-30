@@ -10,15 +10,30 @@ const ROOT = __dirname;
 const DIST = path.join(ROOT, 'dist');
 const rooms = new Map();
 const matchmaking = [];
-const VERSION = 'ONLINE-REBUILD-2';
+const VERSION = 'ONLINE-REBUILD-3';
 const DB_FILE = path.join(ROOT, 'tomtom-data.json');
-let db = { users: {}, games: [] };
+let db = { users: {}, games: [], clans: {} };
+if (!db.clans) db.clans = {};
 try { if (fs.existsSync(DB_FILE)) db = { ...db, ...JSON.parse(fs.readFileSync(DB_FILE, 'utf8')) }; } catch (_) {}
 function persist(){ try { fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2)); } catch (_) {} }
 function hash(v){ return crypto.createHash('sha256').update(String(v)).digest('hex'); }
 function token(){ return crypto.randomBytes(24).toString('hex'); }
-function safeUser(u){ return { username:u.username, name:u.name, rating:u.rating, wins:u.wins, losses:u.losses, draws:u.draws, level:u.level, xp:u.xp }; }
+function leagueFor(rating){ const r=Number(rating)||1200; if(r<1000)return {key:'bronze',name:'برنز',min:0,max:999}; if(r<1200)return {key:'silver',name:'نقره‌ای',min:1000,max:1199}; if(r<1400)return {key:'gold',name:'طلایی',min:1200,max:1399}; if(r<1600)return {key:'platinum',name:'پلاتینیوم',min:1400,max:1599}; if(r<1800)return {key:'diamond',name:'الماس',min:1600,max:1799}; return {key:'master',name:'مستر',min:1800,max:null}; }
+function safeUser(u){ return { username:u.username, name:u.name, rating:u.rating, wins:u.wins, losses:u.losses, draws:u.draws, level:u.level, xp:u.xp, league:leagueFor(u.rating) }; }
 function auth(body){ const u=db.users[String(body.username||'').toLowerCase()]; return u && u.token===body.token ? u : null; }
+function clanLevel(xp){ let level=1, need=500, rest=Math.max(0,Number(xp)||0); while(rest>=need && level<50){rest-=need;level++;need=Math.round(need*1.25)} return {level,xp:rest,next:need}; }
+function clanRoleName(role){ return ({leader:'رهبر',deputy:'قائم‌مقام',veteran:'پیشکسوت',member:'تازه‌وارد'})[role]||'تازه‌وارد'; }
+function clanSafe(c){
+  const lv=clanLevel(c.xp||0);
+  return {id:c.id,name:c.name,tag:c.tag,badge:c.badge,level:lv.level,xp:lv.xp,nextXp:lv.next,leader:c.leader,memberCount:c.members.length,war:c.war?{id:c.war.id,opponent:c.war.opponent,startsAt:c.war.startsAt,endsAt:c.war.endsAt,score:c.war.score,attacks:c.war.attacks}:null};
+}
+function onlineUsernames(){ const set=new Set(); for(const client of wss?.clients||[]) if(client.readyState===WebSocket.OPEN&&client.username) set.add(client.username); return set; }
+function clanView(c){ const on=onlineUsernames(); return {...clanSafe(c),members:c.members.map(m=>({...m,roleName:clanRoleName(m.role),online:on.has(m.username),attacks:c.war?.attacks?.[m.username]||0}))}; }
+function findClanByUser(username){ return Object.values(db.clans).find(c=>c.members.some(m=>m.username===username)); }
+function clanCanManage(c,u){ const m=c?.members.find(x=>x.username===u.username); return m && (m.role==='leader'||m.role==='deputy'); }
+function clanTouchWar(c){ if(c?.war && Date.now()>c.war.endsAt){ c.war=null; persist(); } return c?.war; }
+function clanOpponents(c){ return Object.values(db.clans).filter(x=>x.id!==c.id && x.members.length && !x.war); }
+
 
 function json(res, status, data) {
   res.writeHead(status, {
@@ -88,18 +103,26 @@ function createRoom(ws, id, name, username, reqId) {
   send(ws, { type: 'room_created', reqId, room: id, color: player.color });
   send(ws, state(room));
 }
-function findOpponent() {
-  while (matchmaking.length) {
-    const ws = matchmaking.shift();
-    if (ws && ws.readyState === WebSocket.OPEN && !ws.room) return ws;
+function findOpponent(ws){
+  let bestIndex=-1, bestDiff=Infinity;
+  const rating=Number(ws.__rating)||1200;
+  for(let i=0;i<matchmaking.length;i++){
+    const other=matchmaking[i];
+    if(!other||other===ws||other.readyState!==WebSocket.OPEN||other.room)continue;
+    const diff=Math.abs((Number(other.__rating)||1200)-rating);
+    if(diff<bestDiff){bestDiff=diff;bestIndex=i;}
   }
-  return null;
+  if(bestIndex<0)return null;
+  const other=matchmaking.splice(bestIndex,1)[0];
+  other.__matchReqId=null;
+  return other;
 }
 function matchmake(ws, reqId, msg) {
   removeQueue(ws); leaveRoom(ws, false);
   ws.name = cleanName(msg.name, 'PLAYER');
   ws.username = String(msg.username || '').slice(0, 32);
-  const other = findOpponent();
+  ws.__rating = Math.max(0, Number(msg.rating)||1200);
+  const other = findOpponent(ws);
   if (!other) {
     ws.__matchReqId = reqId;
     matchmaking.push(ws);
@@ -109,7 +132,7 @@ function matchmake(ws, reqId, msg) {
   const room = { code: id, players: [
     { ws: other, color: 'w', name: other.name, username: other.username },
     { ws, color: 'b', name: ws.name, username: ws.username }
-  ], lastMove: null };
+  ], lastMove: null, started: true };
   rooms.set(id, room);
   other.room = id; other.color = 'w';
   ws.room = id; ws.color = 'b';
@@ -157,6 +180,36 @@ const server = http.createServer((req, res) => {
         const u=auth(msg);if(!u)return json(res,401,{error:'نیاز به ورود دارید.'});
         const g=msg.game||{};db.games.push({id:crypto.randomUUID(),players:Array.isArray(g.players)?g.players.slice(0,2):[u.username],result:g.result||'draw',moves:Array.isArray(g.moves)?g.moves.slice(0,500):[],createdAt:new Date().toISOString()});if(db.games.length>1000)db.games=db.games.slice(-1000);persist();return json(res,200,{ok:true});
       }
+
+      if(req.method==='GET' && url.pathname==='/api/clan/search'){
+        const q=String(url.searchParams.get('q')||'').trim().toLowerCase(); const clans=Object.values(db.clans).filter(c=>!q||c.name.toLowerCase().includes(q)||c.tag.toLowerCase().includes(q)).slice(0,30).map(clanSafe); return json(res,200,{clans});
+      }
+      if(req.method==='GET' && url.pathname==='/api/clan'){
+        const u=auth({username:url.searchParams.get('username'),token:url.searchParams.get('token')}); if(!u)return json(res,401,{error:'نیاز به ورود دارید.'}); const c=findClanByUser(u.username); return json(res,200,{clan:c?clanView(c):null});
+      }
+      if(req.method==='POST' && url.pathname==='/api/clan/create'){
+        const u=auth(msg); if(!u)return json(res,401,{error:'ابتدا وارد حساب شوید.'}); if(Number(u.rating)<1200)return json(res,403,{error:'برای ساخت کلن باید به لیگ طلایی برسید.'}); if(findClanByUser(u.username))return json(res,409,{error:'شما همین حالا عضو یک کلن هستید.'});
+        const name=cleanName(msg.name,'TOMTOM CLAN').slice(0,24), tag=String(msg.tag||'TOM').trim().toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,6); if(name.length<3||tag.length<2)return json(res,400,{error:'نام کلن و تگ معتبر وارد کنید.'}); if(Object.values(db.clans).some(c=>c.name.toLowerCase()===name.toLowerCase()||c.tag===tag))return json(res,409,{error:'نام یا تگ کلن قبلاً استفاده شده است.'});
+        const id=crypto.randomUUID(); db.clans[id]={id,name,tag,badge:String(msg.badge||'♜').slice(0,2),leader:u.username,xp:0,members:[{username:u.username,name:u.name,role:'leader',joinedAt:Date.now()}],war:null}; persist(); return json(res,200,{clan:clanView(db.clans[id])});
+      }
+      if(req.method==='POST' && url.pathname==='/api/clan/join'){
+        const u=auth(msg); if(!u)return json(res,401,{error:'ابتدا وارد حساب شوید.'}); if(findClanByUser(u.username))return json(res,409,{error:'ابتدا از کلن فعلی خارج شوید.'}); const c=db.clans[String(msg.clanId||'')]; if(!c)return json(res,404,{error:'کلن پیدا نشد.'}); if(c.members.length>=50)return json(res,409,{error:'ظرفیت کلن پر است.'}); c.members.push({username:u.username,name:u.name,role:'member',joinedAt:Date.now()});persist();return json(res,200,{clan:clanView(c)});
+      }
+      if(req.method==='POST' && url.pathname==='/api/clan/leave'){
+        const u=auth(msg); if(!u)return json(res,401,{error:'ابتدا وارد حساب شوید.'}); const c=findClanByUser(u.username); if(!c)return json(res,404,{error:'عضو کلنی نیستید.'}); if(c.leader===u.username)return json(res,400,{error:'رهبر باید قبل از خروج، رهبری را منتقل کند.'}); c.members=c.members.filter(m=>m.username!==u.username);persist();return json(res,200,{ok:true});
+      }
+      if(req.method==='POST' && url.pathname==='/api/clan/role'){
+        const u=auth(msg); if(!u)return json(res,401,{error:'ابتدا وارد حساب شوید.'}); const c=findClanByUser(u.username); if(!c||!clanCanManage(c,u))return json(res,403,{error:'فقط رهبر یا قائم‌مقام می‌تواند نقش‌ها را تغییر دهد.'}); const target=c.members.find(m=>m.username===String(msg.username||'')); const role=['deputy','veteran','member'].includes(msg.role)?msg.role:null; if(!target||!role)return json(res,400,{error:'عضو یا نقش نامعتبر است.'}); if(target.username===c.leader)return json(res,400,{error:'نقش رهبر قابل تغییر نیست.'}); target.role=role;persist();return json(res,200,{clan:clanView(c)});
+      }
+      if(req.method==='POST' && url.pathname==='/api/clan/war/start'){
+        const u=auth(msg); if(!u)return json(res,401,{error:'ابتدا وارد حساب شوید.'}); const c=findClanByUser(u.username); if(!c||c.leader!==u.username)return json(res,403,{error:'فقط رهبر می‌تواند جنگ کلنی را آغاز کند.'}); clanTouchWar(c); if(c.war)return json(res,409,{error:'کلن شما در حال جنگ است.'}); const pool=clanOpponents(c); if(!pool.length)return json(res,404,{error:'فعلاً کلن دیگری برای جنگ پیدا نشد.'}); const opp=pool[Math.floor(Math.random()*pool.length)]; const now=Date.now(); const war={id:crypto.randomUUID(),opponent:opp.id,startsAt:now,endsAt:now+30*60*1000,score:{[c.id]:0,[opp.id]:0},attacks:{}}; c.war=war; opp.war={...war,opponent:c.id}; persist();return json(res,200,{clan:clanView(c),opponent:clanView(opp)});
+      }
+      if(req.method==='GET' && url.pathname==='/api/clan/war'){
+        const u=auth({username:url.searchParams.get('username'),token:url.searchParams.get('token')}); if(!u)return json(res,401,{error:'نیاز به ورود دارید.'}); const c=findClanByUser(u.username); if(!c)return json(res,404,{error:'عضو کلنی نیستید.'}); clanTouchWar(c); if(!c.war)return json(res,200,{war:null}); const opp=db.clans[c.war.opponent]; return json(res,200,{war:c.war,clan:clanView(c),opponent:opp?clanView(opp):null});
+      }
+      if(req.method==='POST' && url.pathname==='/api/clan/attack'){
+        const u=auth(msg); if(!u)return json(res,401,{error:'ابتدا وارد حساب شوید.'}); const c=findClanByUser(u.username); if(!c||!c.war)return json(res,400,{error:'جنگ فعالی ندارید.'}); clanTouchWar(c); if(!c.war)return json(res,400,{error:'زمان جنگ تمام شده است.'}); const used=c.war.attacks[u.username]||0; if(used>=3)return json(res,409,{error:'هر بازیکن فقط ۳ رقابت دارد.'}); const result=['win','draw','loss'].includes(msg.result)?msg.result:'draw'; c.war.attacks[u.username]=used+1; const pts=result==='win'?1:result==='draw'?0.5:0; c.war.score[c.id]=(c.war.score[c.id]||0)+pts; const opp=db.clans[c.war.opponent]; if(opp?.war){opp.war.attacks[u.username]=used+1;opp.war.score[c.id]=c.war.score[c.id];} c.xp+=(result==='win'?40:result==='draw'?20:10); persist();return json(res,200,{war:c.war,clan:clanView(c)});
+      }
       return json(res,404,{error:'Not found'});
     }); return;
   }
@@ -186,7 +239,7 @@ const heartbeat = setInterval(() => {
 wss.on('close', () => clearInterval(heartbeat));
 
 wss.on('connection', ws => {
-  ws.isAlive = true; ws.room = null; ws.color = null; ws.name = 'PLAYER'; ws.username = ''; ws.__matchReqId = null;
+  ws.isAlive = true; ws.room = null; ws.color = null; ws.name = 'PLAYER'; ws.username = ''; ws.__matchReqId = null; ws.__rating = 1200;
   ws.on('pong', () => { ws.isAlive = true; });
   ws.on('error', () => {});
   // Informational only. The client never requires this message before sending a request.
@@ -200,6 +253,17 @@ wss.on('connection', ws => {
     if (msg.type === 'leave_room') { removeQueue(ws); leaveRoom(ws, true); return send(ws, { type: 'left_room', reqId }); }
     if (msg.type === 'create_room') return createRoom(ws, String(msg.room || '').trim().toUpperCase(), msg.name, msg.username, reqId);
     if (msg.type === 'join_room') return joinRoom(ws, String(msg.room || '').trim().toUpperCase(), msg.name, msg.username, reqId);
+    if (msg.type === 'clan_presence') {
+      ws.username=String(msg.username||ws.username||'').toLowerCase(); ws.name=cleanName(msg.name,ws.name); return send(ws,{type:'clan_presence',online:true,username:ws.username});
+    }
+    if (msg.type === 'clan_war_match') {
+      const u=db.users[String(ws.username||msg.username||'').toLowerCase()]; const c=u?findClanByUser(u.username):null; if(!c)return send(ws,{type:'error',reqId,message:'ابتدا وارد حساب و کلن شوید.'}); clanTouchWar(c); if(!c.war)return send(ws,{type:'error',reqId,message:'جنگ فعالی وجود ندارد.'});
+      const used=c.war.attacks[u.username]||0; if(used>=3)return send(ws,{type:'error',reqId,message:'هر بازیکن فقط ۳ رقابت دارد.'}); const opp=db.clans[c.war.opponent]; if(!opp)return send(ws,{type:'error',reqId,message:'کلن مقابل پیدا نشد.'});
+      let target=null; for(const client of wss.clients){if(client===ws||client.readyState!==WebSocket.OPEN||!client.username)continue; const ou=db.users[String(client.username).toLowerCase()]; const oc=ou?findClanByUser(ou.username):null; if(oc&&oc.id===opp.id&&(c.war.attacks[ou.username]||0)<3){target=client;break}}
+      if(!target)return send(ws,{type:'error',reqId,message:'فعلاً بازیکن آنلاین و آماده‌ای از کلن مقابل پیدا نشد.'});
+      const id=roomCode(); const room={code:id,players:[{ws,color:'w',name:ws.name,username:ws.username},{ws:target,color:'b',name:target.name,username:target.username}],lastMove:null,started:true,clanWar:{a:c.id,b:opp.id}}; rooms.set(id,room); ws.room=id;ws.color='w';target.room=id;target.color='b';
+      send(ws,{type:'match_found',reqId,room:id,color:'w',clanWar:true}); send(target,{type:'match_found',room:id,color:'b',clanWar:true}); return broadcast(room,state(room));
+    }
     if (msg.type === 'start_game') {
       const room = roomOf(ws);
       if (!room) return send(ws, { type: 'error', reqId, message: 'ابتدا وارد اتاق شوید.' });
@@ -207,6 +271,9 @@ wss.on('connection', ws => {
       room.started = true; room.lastMove = null;
       broadcast(room, { type: 'game_started', room: room.code });
       return send(ws, { type: 'game_started', reqId, room: room.code });
+    }
+    if (msg.type === 'clan_chat') {
+      const u=db.users[String(ws.username||'').toLowerCase()]; const c=u?findClanByUser(u.username):null; if(!c)return send(ws,{type:'error',reqId,message:'عضو کلنی نیستید.'}); const text=String(msg.text||'').trim().slice(0,180); if(!text)return; for(const client of wss.clients){if(client.readyState!==WebSocket.OPEN||!client.username)continue; const cu=db.users[String(client.username).toLowerCase()]; const cc=cu?findClanByUser(cu.username):null; if(cc?.id===c.id)send(client,{type:'clan_chat',name:ws.name,text,at:Date.now()})} return;
     }
     const room = roomOf(ws);
     if (!room) return send(ws, { type: 'error', reqId, message: 'ابتدا یک اتاق بسازید یا وارد اتاق شوید.' });

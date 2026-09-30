@@ -63,7 +63,7 @@ function goHomeFromGame(){
   showHome();
 }
 function openHomePanelNav(panel){
-  const key=panel===onlinePanel?'online':panel===profilePanel?'profile':panel===rankPanel?'rank':'settings';
+  const key=panel===onlinePanel?'online':panel===profilePanel?'profile':panel===rankPanel?'rank':panel===clanPanel?'clan':panel===clanChatPanel?'clanchat':'settings';
   window.history.pushState({tomtom:key},'',location.href);
   openHomePanel(panel);
 }
@@ -77,6 +77,8 @@ window.addEventListener('popstate',()=>{
   else if(st==='online'){ openHomePanel(onlinePanel); }
   else if(st==='profile'){ openHomePanel(profilePanel); }
   else if(st==='rank'){ openHomePanel(rankPanel); }
+  else if(st==='clan'){ openHomePanel(clanPanel); if(window.tomtomLoadClan)window.tomtomLoadClan(); }
+  else if(st==='clanchat'){ openHomePanel(clanChatPanel); }
   else if(st==='settings'){ openHomePanel(settingsPanel); }
   else { showHome(); }
 });
@@ -805,6 +807,8 @@ const settingsPanel=document.getElementById('settings');
 const profilePanel=document.getElementById('profilePanel');
 const onlinePanel=document.getElementById('onlinePanel');
 const rankPanel=document.getElementById('rankPanel');
+const clanPanel=document.getElementById('clanPanel');
+const clanChatPanel=document.getElementById('clanChatPanel');
 const playerName=document.getElementById('playerName');
 const avatarSelect=document.getElementById('avatarSelect');
 const whitePlayer=document.getElementById('whitePlayer');
@@ -835,6 +839,7 @@ function awardResult(result){
   while(profile.xp>=100){profile.xp-=100;profile.level++}
   saveProfileData();
   if(typeof window.tomtomSyncResult==='function') window.tomtomSyncResult(result);
+  if(typeof window.tomtomClanResult==='function' && online.connected && online.started) window.tomtomClanResult(result);
 }
 function updateClocks(){
   const f=s=>`${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
@@ -1096,6 +1101,7 @@ const homeOnlineBtn=document.getElementById('homeOnlineBtn');
 const homeProfileBtn=document.getElementById('homeProfileBtn');
 const homeRankBtn=document.getElementById('homeRankBtn');
 const homeSettingsBtn=document.getElementById('homeSettingsBtn');
+const homeClanBtn=document.getElementById('homeClanBtn');
 const homeSettingsTile=document.getElementById('homeSettingsTile');
 const backHomeBtn=document.getElementById('backHomeBtn');
 
@@ -1120,6 +1126,7 @@ if(backHomeBtn) backHomeBtn.addEventListener('click',()=>{ closeOfflineMode(); h
 if(homeOnlineBtn) homeOnlineBtn.addEventListener('click',()=>openHomePanelNav(onlinePanel));
 if(homeProfileBtn) homeProfileBtn.addEventListener('click',()=>openHomePanelNav(profilePanel));
 if(homeRankBtn) homeRankBtn.addEventListener('click',()=>openHomePanelNav(rankPanel));
+if(homeClanBtn) homeClanBtn.addEventListener('click',()=>{openHomePanelNav(clanPanel); if(window.tomtomLoadClan)window.tomtomLoadClan();});
 if(homeSettingsBtn) homeSettingsBtn.addEventListener('click',()=>openHomePanelNav(settingsPanel));
 if(homeSettingsTile) homeSettingsTile.addEventListener('click',()=>openHomePanelNav(settingsPanel));
 
