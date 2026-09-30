@@ -123,7 +123,7 @@
             <button class="chat-send" type="submit">➤</button>
           </form>
         </div>
-        <section class="bottom-tools" aria-label="کنترل‌های بازی آنلاین">
+        <section class="bottom-tools online-chat-tools" aria-label="کنترل‌های نمای آنلاین">
           <button id="whiteViewBtn" class="tool-btn">♔ <span>نمای سفید</span></button>
           <button id="blackViewBtn" class="tool-btn">♚ <span>نمای سیاه</span></button>
           <button id="chatFocusBtn" class="tool-btn">💬 <span>چت</span></button>
@@ -139,8 +139,20 @@
       </div>
       <div class="rating-box"><b id="rating">1200</b><small>RATING</small></div>
     </section>
-    <div class="footer" id="footer">TOMTOM CHESS PRO • صدا خاموش است.</div>
+    <div class="footer" id="footer">TOMTOM CHESS • افکت‌های بازی</div>
   </main>
+
+  <div class="opponent-exit-modal" id="opponentExitModal" aria-hidden="true">
+    <div class="opponent-exit-card">
+      <div class="modal-kicker">ONLINE MATCH</div>
+      <h2>بازیکن از بازی خارج شد</h2>
+      <p>حریف دیگر آنلاین نیست. می‌خواهی در صفحه بازی بمانی یا از بازی خارج شوی؟</p>
+      <div class="opponent-exit-actions">
+        <button id="opponentStayBtn" class="secondary-btn">ادامه می‌دهم</button>
+        <button id="opponentExitBtn" class="primary-btn">خروج</button>
+      </div>
+    </div>
+  </div>
 
   <div class="offline-mode-modal" id="offlineModeModal" aria-hidden="true">
     <div class="offline-mode-card">

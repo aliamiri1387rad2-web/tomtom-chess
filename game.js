@@ -91,7 +91,10 @@ function enterGameNav(gameType='offline'){
 window.addEventListener('popstate',()=>{
   const st=navState();
   if(st==='game-online'){ showGameScreen('online'); }
-  else if(st==='game-offline'||st==='game'){ showGameScreen('offline'); }
+  else if(st==='game-online-settings'){ showGameScreen('online'); showPanel(settingsPanel); }
+  else if(st==='game-offline'){ showGameScreen('offline'); }
+  else if(st==='game-offline-settings'){ showGameScreen('offline'); showPanel(settingsPanel); }
+  else if(st==='game'){ showGameScreen('offline'); }
   else if(st==='online'){ openHomePanel(onlinePanel); }
   else if(st==='profile'){ openHomePanel(profilePanel); }
   else if(st==='rank'){ openHomePanel(rankPanel); }
@@ -673,7 +676,7 @@ function updateStatus() {
       modalTitleEl.textContent='کیش‌ومات';
       modalTextEl.textContent=turn==='w' ? 'سیاه برنده شد.' : 'سفید برنده شد.';
       playTone('win');
-      if(!gameResultAwarded){ gameResultAwarded=true; awardResult('loss'); }
+      if(!gameResultAwarded){ gameResultAwarded=true; const winner=other(turn); const result=online.connected ? (winner===online.color?'win':'loss') : (winner==='w'?'win':'loss'); awardResult(result); }
     } else {
       statusEl.textContent='پات؛ بازی مساوی شد.';
       modalTitleEl.textContent='مساوی';
@@ -846,12 +849,19 @@ function saveProfileData(){
   for(const [id,val] of [['wins',profile.wins],['losses',profile.losses],['draws',profile.draws]]){const el=document.getElementById(id);if(el)el.textContent=val}
 }
 function awardResult(result){
-  if(result==='win'){profile.wins++;profile.rating+=10;profile.xp+=25}
-  else if(result==='loss'){profile.losses++;profile.rating=Math.max(0,profile.rating-8);profile.xp+=8}
+  // Online rating is authoritative on the server. Do not add a second local
+  // rating delta before the server response arrives.
+  if(result==='win'){profile.wins++;profile.xp+=25}
+  else if(result==='loss'){profile.losses++;profile.xp+=8}
   else {profile.draws++;profile.xp+=12}
   while(profile.xp>=100){profile.xp-=100;profile.level++}
   saveProfileData();
-  if(typeof window.tomtomSyncResult==='function') window.tomtomSyncResult(result);
+  if(typeof window.tomtomSyncResult==='function' && online.connected){
+    window.tomtomSyncResult(result);
+  } else if(!online.connected){
+    if(result==='win') profile.rating+=10; else if(result==='loss') profile.rating=Math.max(0,profile.rating-8);
+    saveProfileData();
+  }
 }
 function updateClocks(){
   const f=s=>`${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
@@ -859,7 +869,7 @@ function updateClocks(){
   if(w)w.textContent=f(clockSeconds.w);if(b)b.textContent=f(clockSeconds.b);
 }
 function stopClock(){if(clockTimer){clearInterval(clockTimer);clockTimer=null}}
-function startClock(){stopClock();if(gameOver||paused)return;clockTimer=setInterval(()=>{if(gameOver||paused){stopClock();return}clockSeconds[turn]--;updateClocks();if(clockSeconds[turn]<=0){clockSeconds[turn]=0;gameOver=true;stopClock();const winner=other(turn);statusEl.textContent=winner==='w'?'زمان تمام شد؛ سفید برنده شد.':'زمان تمام شد؛ سیاه برنده شد.';modalTitleEl.textContent='زمان تمام شد';modalTextEl.textContent=winner==='w'?'سفید برنده شد.':'سیاه برنده شد.';if(!gameResultAwarded){gameResultAwarded=true;awardResult(winner==='w'?'win':'loss');}setTimeout(showModal,100)}} ,1000)}
+function startClock(){stopClock();if(gameOver||paused)return;clockTimer=setInterval(()=>{if(gameOver||paused){stopClock();return}clockSeconds[turn]--;updateClocks();if(clockSeconds[turn]<=0){clockSeconds[turn]=0;gameOver=true;stopClock();const winner=other(turn);statusEl.textContent=winner==='w'?'زمان تمام شد؛ سفید برنده شد.':'زمان تمام شد؛ سیاه برنده شد.';modalTitleEl.textContent='زمان تمام شد';modalTextEl.textContent=winner==='w'?'سفید برنده شد.':'سیاه برنده شد.';if(!gameResultAwarded){gameResultAwarded=true;const result=online.connected?(winner===online.color?'win':'loss'):(winner==='w'?'win':'loss');awardResult(result);}setTimeout(showModal,100)}} ,1000)}
 function showModal(){if(modalEl){modalEl.classList.add('show');modalEl.setAttribute('aria-hidden','false')}}
 function hideModal(){if(modalEl){modalEl.classList.remove('show');modalEl.setAttribute('aria-hidden','true')}}
 function hidePause(){const e=document.getElementById('pauseOverlay');if(e){e.classList.remove('show');e.setAttribute('aria-hidden','true')}}
@@ -910,6 +920,22 @@ function applyAudioSettings(){
   if(volEl) volEl.value=Math.round(masterVolume*100);
   if(volOut) volOut.value=Math.round(masterVolume*100)+'٪';
 }
+let themeName='classic';
+function applyTheme(){
+  document.body.classList.remove('theme-midnight','theme-emerald');
+  if(themeName!=='classic') document.body.classList.add('theme-'+themeName);
+}
+function loadVisualSettings(){
+  try{const raw=JSON.parse(localStorage.getItem('tomtom_visual')||'null');if(raw){pieceSet=['classic','mono','royal'].includes(raw.pieceSet)?raw.pieceSet:'classic';themeName=['classic','midnight','emerald'].includes(raw.theme)?raw.theme:'classic';}}catch(_){}
+  const ps=document.getElementById('pieceSet'),th=document.getElementById('theme');if(ps)ps.value=pieceSet;if(th)th.value=themeName;applyTheme();
+}
+function saveVisualSettings(){
+  try{localStorage.setItem('tomtom_visual',JSON.stringify({pieceSet,theme:themeName}));}catch(_){}
+  applyTheme();
+  if(board&&board.length===8) render();
+}
+loadVisualSettings();
+
 function loadAudioSettings(){
   try{
     const raw=JSON.parse(localStorage.getItem('tomtom_audio')||'null');
@@ -955,6 +981,7 @@ if(whiteViewBtn)whiteViewBtn.addEventListener('click',()=>{boardFlipped=false;re
 if(blackViewBtn)blackViewBtn.addEventListener('click',()=>{boardFlipped=true;render();});
 if(chatFocusBtn)chatFocusBtn.addEventListener('click',()=>{document.getElementById('chatInput')?.focus();});
 document.getElementById('chatMessages')?.addEventListener('click',()=>document.getElementById('chatInput')?.focus());
+document.querySelectorAll('.emoji-row button').forEach(btn=>btn.addEventListener('click',()=>{const input=document.getElementById(btn.parentElement.dataset.target||'chatInput');if(!input)return;const start=input.selectionStart??input.value.length,end=input.selectionEnd??input.value.length;input.value=input.value.slice(0,start)+btn.textContent+input.value.slice(end);input.focus();input.setSelectionRange(start+btn.textContent.length,start+btn.textContent.length);}));
 function syncGameModeUI(){
   const onlineMode=document.body.classList.contains('online-game');
   document.querySelectorAll('.offline-only-controls,.offline-only').forEach(el=>el.hidden=onlineMode);
@@ -962,7 +989,15 @@ function syncGameModeUI(){
   const onlineChat=document.getElementById('onlineChatTopBtn');
   if(onlineChat) onlineChat.onclick=()=>document.getElementById('chatInput')?.focus();
 }
-const settingsBtn=document.getElementById('settingsBtn');if(settingsBtn)settingsBtn.addEventListener('click',()=>showPanel(settingsPanel));
+const settingsBtn=document.getElementById('settingsBtn');if(settingsBtn)settingsBtn.addEventListener('click',()=>{
+  const ps=document.getElementById('pieceSet'),th=document.getElementById('theme');if(ps)ps.value=pieceSet;if(th)th.value=themeName;applyTheme();
+  const current=navState();
+  if(current==='game-online'||current==='game-offline'||current==='game'){
+    const target=current==='game-online'?'game-online-settings':'game-offline-settings';
+    window.history.pushState({tomtom:target},'',location.href);
+    showPanel(settingsPanel);
+  }else showPanel(settingsPanel);
+});
 const closeSettingsBtn=document.getElementById('closeSettings');if(closeSettingsBtn)closeSettingsBtn.addEventListener('click',closeCurrentPanel);
 const closeProfileBtn=document.getElementById('closeProfile');if(closeProfileBtn)closeProfileBtn.addEventListener('click',closeCurrentPanel);
 const saveProfileBtn=document.getElementById('saveProfile');if(saveProfileBtn)saveProfileBtn.addEventListener('click',()=>{profile.name=(playerName.value||'TOMTOM PLAYER').trim()||'TOMTOM PLAYER';profile.avatar=avatarSelect.value;saveProfileData();profilePanel.classList.remove('show');profilePanel.setAttribute('aria-hidden','true');if(homeRatingEl)homeRatingEl.textContent=profile.rating});
@@ -973,7 +1008,18 @@ const AI_NOTES={weak:'ضعیف: حرکت‌های ساده و سریع.',medium:
 function updateAILevelNote(){if(aiLevelNote)aiLevelNote.textContent=AI_NOTES[aiLevelEl?.value||aiLevel]||'';}
 if(aiLevelEl){aiLevelEl.value=aiLevel;aiLevelEl.addEventListener('change',()=>{aiLevel=aiLevelEl.value;updateAILevelNote();});}
 updateAILevelNote();
-const masterVolumeEl=document.getElementById('masterVolume');const masterVolumeValue=document.getElementById('masterVolumeValue');if(masterVolumeEl)masterVolumeEl.addEventListener('input',()=>{masterVolume=Math.max(0,Math.min(1,Number(masterVolumeEl.value)/100));if(masterVolumeValue)masterVolumeValue.value=Math.round(masterVolume*100)+'٪';applyAudioSettings();});const saveSettingsBtn=document.getElementById('saveSettings');if(saveSettingsBtn)saveSettingsBtn.addEventListener('click',()=>{timeControlSeconds=Number(document.getElementById('timeControl')?.value)||600;pieceSet=document.getElementById('pieceSet')?.value||'classic';smartMode=!!document.getElementById('smartMode')?.checked;aiLevel=aiLevelEl?.value||'medium';saveAudioSettings();settingsPanel.classList.remove('show');settingsPanel.setAttribute('aria-hidden','true');});
+const masterVolumeEl=document.getElementById('masterVolume');const masterVolumeValue=document.getElementById('masterVolumeValue');if(masterVolumeEl)masterVolumeEl.addEventListener('input',()=>{masterVolume=Math.max(0,Math.min(1,Number(masterVolumeEl.value)/100));if(masterVolumeValue)masterVolumeValue.value=Math.round(masterVolume*100)+'٪';applyAudioSettings();});const saveSettingsBtn=document.getElementById('saveSettings');if(saveSettingsBtn)saveSettingsBtn.addEventListener('click',()=>{
+  timeControlSeconds=Number(document.getElementById('timeControl')?.value)||600;
+  pieceSet=document.getElementById('pieceSet')?.value||'classic';
+  themeName=document.getElementById('theme')?.value||'classic';
+  saveVisualSettings();
+  smartMode=!!document.getElementById('smartMode')?.checked;
+  aiLevel=aiLevelEl?.value||'medium';
+  saveAudioSettings();
+  const st=navState();
+  if(st==='game-online-settings'||st==='game-offline-settings') window.history.back();
+  else {settingsPanel.classList.remove('show');settingsPanel.setAttribute('aria-hidden','true');}
+});
 
 
 // ===== ONLINE ARENA — CLEAN REBUILD =====
@@ -1036,10 +1082,10 @@ function handleOnlineMessage(ws,m){
     const box=document.getElementById('roomMessage');if(box)box.textContent='جستجوی حریف لغو شد.';
   }else if(m.type==='remote_move'&&m.move){makeMove(m.move,true)}
   else if(m.type==='new_game'){resetGame()}
-  else if(m.type==='resigned'){online.started=false;const box=document.getElementById('roomMessage');if(box)box.textContent='حریف تسلیم شد.'}
+  else if(m.type==='resigned'){online.started=false;const box=document.getElementById('roomMessage');if(box)box.textContent='حریف تسلیم شد.';if(!gameResultAwarded){gameResultAwarded=true;awardResult('win');}}
   else if(m.type==='chat'&&m.color!==online.color){addChat(m.name||'حریف',m.text,false)}
   else if(m.type==='opponent_left'){
-    online.started=false;online.room=null;const sb=document.getElementById('startOnlineGame');if(sb)sb.style.display='none';const box=document.getElementById('roomMessage');if(box)box.textContent='حریف آفلاین شد.';const cs=document.getElementById('chatState');if(cs)cs.textContent='آفلاین';const dot=document.getElementById('onlineDot');if(dot)dot.classList.remove('connected');setTimeout(()=>{if(navState()==='game'){goHomeFromGame();}},250);
+    online.started=false;online.room=null;const sb=document.getElementById('startOnlineGame');if(sb)sb.style.display='none';const cs=document.getElementById('chatState');if(cs)cs.textContent='آفلاین';const dot=document.getElementById('onlineDot');if(dot)dot.classList.remove('connected');const st=document.getElementById('status');if(st)st.textContent='حریف از بازی خارج شد.';showOpponentExitModal();
   }else if(m.type==='error'){
     const box=document.getElementById('roomMessage');if(box)box.textContent=m.message||'خطا از طرف سرور.';
   }
@@ -1049,6 +1095,16 @@ function handleOnlineMessage(ws,m){
     else if(['room_created','room_joined','match_found','match_waiting','match_cancelled','left_room','game_started'].includes(m.type))pending[m.reqId].resolve(m);
   }
 }
+function showOpponentExitModal(){
+  const m=document.getElementById('opponentExitModal');if(m){m.classList.add('show');m.setAttribute('aria-hidden','false');}
+}
+function hideOpponentExitModal(){
+  const m=document.getElementById('opponentExitModal');if(m){m.classList.remove('show');m.setAttribute('aria-hidden','true');}
+}
+const opponentStayBtn=document.getElementById('opponentStayBtn'), opponentExitBtn=document.getElementById('opponentExitBtn');
+if(opponentStayBtn)opponentStayBtn.addEventListener('click',hideOpponentExitModal);
+if(opponentExitBtn)opponentExitBtn.addEventListener('click',()=>{hideOpponentExitModal();goHomeFromGame();});
+
 function leaveOnlineRoom(){
   try{
     if(online.ws && online.ws.readyState===WebSocket.OPEN){

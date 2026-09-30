@@ -801,3 +801,30 @@ body.game-mode .tomtom-bg-layer .starfield{display:none!important;}
 .online-game .game-side-panel .bottom-tools{display:flex!important;}
 .online-title{font-weight:900;letter-spacing:.4px;color:#e9f2ff;}
 .online-title small{display:block;font-size:9px;color:#78b7ff;margin-top:2px;text-align:center;}
+
+/* S6: truly separate online/offline game surfaces */
+.online-game .home-back{display:none!important;}
+.online-game .offline-only-controls,
+.online-game .offline-only,
+.online-game .offline-mode-modal,
+.online-game .offline-ai-setting,
+.online-game #mode,
+.online-game #newGame,
+.online-game #sound{display:none!important;}
+.offline-game .online-toolbar{display:none!important;}
+.online-game .chat-card{display:flex!important;}
+.online-game .move-list,.online-game .compact-card{display:none!important;}
+.offline-game .chat-card,.offline-game .online-toolbar{display:none!important;}
+.offline-game .bottom-tools{display:none!important;}
+.online-game .bottom-tools{display:flex!important;}
+
+
+/* S7: functional chat emoji controls */
+.emoji-row button{cursor:pointer;user-select:none;transition:transform .12s,background .12s}
+.emoji-row button:active{transform:scale(.9);background:rgba(255,255,255,.16)}
+.league-badge-img{width:24px;height:24px;vertical-align:middle;margin-left:5px;object-fit:contain}
+.opponent-exit-modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,.78);z-index:4000;backdrop-filter:blur(9px)}
+.opponent-exit-modal.show{display:flex}
+.opponent-exit-card{width:min(430px,100%);background:#101c30;border:1px solid #ffffff18;border-radius:22px;padding:22px;box-shadow:0 25px 80px #0009;text-align:center}
+.opponent-exit-card h2{margin:8px 0 10px}.opponent-exit-card p{color:#aeb9ca;line-height:1.8;font-size:13px;margin:0 0 18px}
+.opponent-exit-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}.opponent-exit-actions button{min-height:46px}
