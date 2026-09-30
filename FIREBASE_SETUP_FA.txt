@@ -1,0 +1,28 @@
+راه‌اندازی حساب ابری TOMTOM CHESS
+
+1) در Firebase یک Project بسازید.
+2) یک Web App اضافه کنید و مقادیر Firebase Config را بردارید.
+3) در Authentication > Sign-in method این دو روش را فعال کنید:
+   - Google
+   - Phone
+4) در Firestore Database یک دیتابیس بسازید.
+5) دامنه‌ای که بازی روی آن اجرا می‌شود را در Authentication > Settings > Authorized domains اضافه کنید.
+6) فایل public/firebase-config.js را باز کنید و مقادیر PASTE_... را با Config پروژه خود عوض کنید.
+7) فایل را دوباره روی GitHub/Render قرار دهید.
+
+توجه: کلید apiKey در Firebase Web Config مثل رمز سرور نیست و برای استفاده در کلاینت طراحی شده است؛ امنیت داده‌ها باید با Firestore Security Rules انجام شود.
+
+Rules پیشنهادی اولیه برای پروفایل کاربران:
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow create, update: if request.auth != null && request.auth.uid == uid;
+      allow delete: if false;
+    }
+  }
+}
+
+برای ورود با شماره موبایل، Firebase ممکن است reCAPTCHA و تنظیمات سرویس پیامک/کشورهای مجاز را بخواهد.

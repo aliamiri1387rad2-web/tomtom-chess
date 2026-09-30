@@ -1,8 +1,8 @@
 {
   "name": "tomtom-chess-online",
-  "version": "7.1.0",
+  "version": "6.5.0",
   "private": true,
-  "description": "TOMTOM CHESS V7 core with Level 1 and five-level progression architecture",
+  "description": "TOMTOM CHESS - mobile-ready React/Vite shell with robust WebSocket rooms and matchmaking",
   "type": "module",
   "scripts": {
     "dev": "vite",

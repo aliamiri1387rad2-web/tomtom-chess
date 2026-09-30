@@ -63,10 +63,5 @@
    el.append(b,span); box.appendChild(el); box.scrollTop=box.scrollHeight;
  }
  form.addEventListener('submit',e=>{e.preventDefault();const text=input.value.trim();if(!text)return;if(!online.ws||online.ws.readyState!==WebSocket.OPEN){state.textContent='آفلاین';return}sendOnline({type:'chat',text});addChat('شما',text,true);input.value='';});
- const oldConnect=window.connectOnline;
- // The core connection function is global; augment its message handler through a small WebSocket message tap.
- const timer=setInterval(()=>{if(online.ws && !online.ws.__chatHook){
-   const ws=online.ws; ws.__chatHook=true; const old=ws.onmessage; ws.onmessage=(ev)=>{old&&old(ev); try{const m=JSON.parse(ev.data); if(m.type==='chat' && m.color!==online.color){addChat(m.name||'حریف',m.text,false)}}catch{}};
- } state.textContent=(online.connected?'آنلاین':'آماده');},700);
- window.addEventListener('beforeunload',()=>clearInterval(timer));
+ // Chat messages are handled by the core WebSocket message handler in game.js.
 })();
