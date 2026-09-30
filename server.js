@@ -25,7 +25,6 @@ function httpJson(res,status,obj){res.writeHead(status,{'Content-Type':'applicat
 const server=http.createServer((req,res)=>{
  const url=new URL(req.url,'http://localhost');
  if(req.method==='OPTIONS'){res.writeHead(204,{'Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'Content-Type'});return res.end()}
- if(req.method==='GET'&&url.pathname==='/health'){return httpJson(res,200,{ok:true,service:'TOMTOM CHESS',websocket:true,time:new Date().toISOString()})}
  if(url.pathname.startsWith('/api/')){
   let body='';req.on('data',c=>body+=c);req.on('end',()=>{
    let msg={};try{msg=body?JSON.parse(body):{}}catch{return httpJson(res,400,{error:'JSON نامعتبر'})}
@@ -81,7 +80,6 @@ wss.on('connection',ws=>{
   if(msg.type==='move'){if(msg.color!==ws.color)return send(ws,{type:'error',message:'بازیکن نامعتبر.'});room.lastMove=msg.move;broadcast(room,{type:'remote_move',move:msg.move,color:ws.color},ws)}
   else if(msg.type==='new_game'){room.lastMove=null;broadcast(room,{type:'new_game'},ws)}
   else if(msg.type==='resign'){broadcast(room,{type:'resigned',color:ws.color},ws)}
-  else if(msg.type==='chat'){const text=String(msg.text||'').trim().slice(0,180);if(!text)return;broadcast(room,{type:'chat',text,name:ws.name||'PLAYER',color:ws.color,at:Date.now()},null)}
   else if(msg.type==='ping')send(ws,{type:'pong'})
  });ws.on('close',()=>leave(ws));
 });

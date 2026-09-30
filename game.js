@@ -18,70 +18,6 @@ const modeEl = document.getElementById('mode');
 const newGameBtn = document.getElementById('newGame');
 const againBtn = document.getElementById('again');
 const soundBtn = document.getElementById('sound');
-const homeScreen = document.getElementById('homeScreen');
-const gameScreen = document.getElementById('gameScreen');
-const homeRatingEl = document.getElementById('homeRating');
-
-function closeAllPanels(){
-  document.querySelectorAll('.settings.show').forEach(el=>{el.classList.remove('show');el.setAttribute('aria-hidden','true')});
-}
-function showHome(){
-  closeAllPanels();
-  document.body.classList.add('home-mode');
-  document.body.classList.remove('game-mode');
-  if (homeScreen) homeScreen.setAttribute('aria-hidden','false');
-  if (gameScreen) gameScreen.setAttribute('aria-hidden','true');
-}
-function showGameScreen(){
-  closeAllPanels();
-  document.body.classList.remove('home-mode');
-  document.body.classList.add('game-mode');
-  if (homeScreen) homeScreen.setAttribute('aria-hidden','true');
-  if (gameScreen) gameScreen.setAttribute('aria-hidden','false');
-  requestAnimationFrame(()=>{ if(board && board.length===8) render(); updateClocks(); });
-}
-function openHomePanel(panel){
-  // Home panels belong to the home screen. Never switch to the chess game
-  // just because the user opened Online/Profile/Ranking/Settings.
-  closeAllPanels();
-  document.body.classList.add('home-mode');
-  document.body.classList.remove('game-mode');
-  if (homeScreen) homeScreen.setAttribute('aria-hidden','false');
-  if (gameScreen) gameScreen.setAttribute('aria-hidden','true');
-  if (panel===profilePanel){ playerName.value=profile.name; avatarSelect.value=profile.avatar; }
-  // Show the requested panel first; network work must never delay the UI.
-  if (panel) showPanel(panel);
-  if (panel===onlinePanel && typeof connectOnline==='function') setTimeout(()=>connectOnline(),0);
-}
-
-// Android/browser back navigation for this single-page app.
-// Game -> Home, Panel -> Home, while the Home screen itself may leave the page.
-let tomtomNavReady=false;
-function navState(){ return window.history.state?.tomtom || null; }
-function goHomeFromGame(){
-  if(navState()==='game'){ window.history.back(); return; }
-  showHome();
-}
-function openHomePanelNav(panel){
-  const key=panel===onlinePanel?'online':panel===profilePanel?'profile':panel===rankPanel?'rank':panel===clanPanel?'clan':panel===clanChatPanel?'clanchat':'settings';
-  window.history.pushState({tomtom:key},'',location.href);
-  openHomePanel(panel);
-}
-function enterGameNav(){
-  window.history.pushState({tomtom:'game'},'',location.href);
-  showGameScreen();
-}
-window.addEventListener('popstate',()=>{
-  const st=navState();
-  if(st==='game'){ showGameScreen(); }
-  else if(st==='online'){ openHomePanel(onlinePanel); }
-  else if(st==='profile'){ openHomePanel(profilePanel); }
-  else if(st==='rank'){ openHomePanel(rankPanel); }
-  else if(st==='clan'){ openHomePanel(clanPanel); if(window.tomtomLoadClan)window.tomtomLoadClan(); }
-  else if(st==='clanchat'){ openHomePanel(clanChatPanel); }
-  else if(st==='settings'){ openHomePanel(settingsPanel); }
-  else { showHome(); }
-});
 
 let board = [];
 let turn = 'w';
@@ -89,36 +25,24 @@ let selected = null;
 let castling = null;
 let enPassant = null;
 let gameOver = false;
-let soundOn = true;
-let musicOn = true;
-let audioUnlocked = false;
-let masterVolume = 0.70;
+let soundOn = false;
 let computerTimer = null;
-let computerThinking = false;
 let lastMove = null;
 let animationBusy = false;
 let boardFlipped = false;
 let paused = false;
-let moveHistory = [];
+let history = [];
 let clockSeconds = {w:600,b:600};
 let clockTimer = null;
+let dragState = null;
+let touchMoved = false;
 let timeControlSeconds = 600;
 let smartMode = true;
 let pieceSet = 'classic';
-let aiLevel = 'medium';
-const AI_CONFIG = {
-  weak:{maxDepth:1,timeMs:80,random:0.55},
-  medium:{maxDepth:2,timeMs:220,random:0.18},
-  strong:{maxDepth:3,timeMs:650,random:0.06},
-  'very-strong':{maxDepth:4,timeMs:1500,random:0.015},
-  king:{maxDepth:5,timeMs:3500,random:0}
-};
+let aiDepth = 2;
 let profile = {name:'TOMTOM PLAYER',avatar:'♞',xp:0,level:1,rating:1200,wins:0,losses:0,draws:0};
 let online = {ws:null, room:null, color:null, connected:false, started:false, remote:false};
 let moveLog = [];
-let halfmoveClock = 0;
-let repetitionCounts = {};
-let gameResultAwarded = false;
 
 function createInitialBoard() {
   return [
@@ -135,8 +59,6 @@ function createInitialBoard() {
 
 function resetGame() {
   if (computerTimer) clearTimeout(computerTimer);
-  computerTimer = null;
-  computerThinking = false;
   stopClock();
   board = createInitialBoard();
   turn = 'w';
@@ -147,17 +69,12 @@ function resetGame() {
   animationBusy = false;
   gameOver = false;
   paused = false;
-  moveHistory = [];
+  history = [];
   moveLog = [];
-  halfmoveClock = 0;
-  repetitionCounts = {};
-  gameResultAwarded = false;
-  repetitionCounts[positionKey()] = 1;
   clockSeconds = {w:timeControlSeconds,b:timeControlSeconds};
   hideModal();
   hidePause();
   render();
-  updateMovePanel();
   updateClocks();
   updateStatus();
   startClock();
@@ -383,47 +300,9 @@ function updateCastlingRights(fr,fc,tr,tc,p) {
   if (tr===0 && tc===7) castling.b.k=false;
 }
 
-function positionKey() {
-  const boardKey=board.map(row=>row.join('')).join('/');
-  const rights=(castling.w.k?'K':'')+(castling.w.q?'Q':'')+(castling.b.k?'k':'')+(castling.b.q?'q':'')||'-';
-  const ep=enPassant ? enPassant.join(',') : '-';
-  return `${boardKey}|${turn}|${rights}|${ep}`;
-}
-
-function isInsufficientMaterial() {
-  const pieces=[];
-  for(let r=0;r<8;r++) for(let c=0;c<8;c++) {
-    const p=board[r][c];
-    if(p && type(p)!=='k') pieces.push({p,r,c});
-  }
-  if(!pieces.length) return true;
-  if(pieces.some(x=>['p','q','r'].includes(type(x.p)))) return false;
-  if(pieces.length===1 && ['b','n'].includes(type(pieces[0].p))) return true;
-  if(pieces.length===2 && pieces.every(x=>type(x.p)==='b') && color(pieces[0].p)!==color(pieces[1].p)) {
-    return ((pieces[0].r+pieces[0].c)%2)===((pieces[1].r+pieces[1].c)%2);
-  }
-  return false;
-}
-
-function finishDraw(title,text) {
-  if(gameOver) return;
-  gameOver=true;
-  statusEl.textContent=text;
-  modalTitleEl.textContent=title;
-  modalTextEl.textContent=text;
-  playTone('draw');
-  if(!gameResultAwarded){ gameResultAwarded=true; awardResult('draw'); }
-  setTimeout(showModal,180);
-}
-
-async function makeMove(move, fromRemote=false, fromAI=false) {
+async function makeMove(move, fromRemote=false) {
   if (animationBusy || gameOver || paused) return;
-  // AI is strictly Black in offline computer mode. Reject any accidental AI move that is not Black.
-  if (fromAI && (online.connected || modeEl.value !== 'computer' || turn !== 'b' || color(board[move.fr][move.fc]) !== 'b' || (board[move.tr][move.tc] && color(board[move.tr][move.tc]) === 'b'))) return;
-  if (online.connected && !fromRemote && !online.started) return;
   if (online.connected && !fromRemote && online.started && turn !== online.color) return;
-  // In offline AI mode the human is always White; Black moves only through the AI.
-  if (!online.connected && modeEl.value === 'computer' && turn === 'b' && !fromAI) return;
 
   const p=board[move.fr][move.fc];
   const captured=board[move.tr][move.tc];
@@ -432,11 +311,9 @@ async function makeMove(move, fromRemote=false, fromAI=false) {
     turn,castling:JSON.parse(JSON.stringify(castling)),
     enPassant:enPassant ? [...enPassant] : null,
     clockSeconds:{...clockSeconds},
-    lastMove:lastMove ? {...lastMove}:null,
-    halfmoveClock,
-    repetitionCounts:{...repetitionCounts}
+    lastMove:lastMove ? {...lastMove}:null
   };
-  moveHistory.push(snapshot);
+  history.push(snapshot);
 
   updateCastlingRights(move.fr,move.fc,move.tr,move.tc,p);
   board = applyMoveToBoard(board,move);
@@ -445,207 +322,51 @@ async function makeMove(move, fromRemote=false, fromAI=false) {
   lastMove={fr:move.fr,fc:move.fc,tr:move.tr,tc:move.tc};
   moveLog.push({fr:move.fr,fc:move.fc,tr:move.tr,tc:move.tc,color:color(p),captured:captured||null});
 
-  // V22: tap-to-move only. Do not animate/rebuild the board before the move;
-  // this keeps the board geometry stable and prevents the visual "double/jump" effect.
   animationBusy=true;
-  playTone(captured ? 'capture' : (move.castle ? 'castle' : (move.promotion ? 'promote' : 'move')));
+  const fromSquare=boardEl.children[move.fr*8+move.fc];
+  const toSquare=boardEl.children[move.tr*8+move.tc];
+  const movingPiece=fromSquare?.querySelector('.piece');
+  if (movingPiece) movingPiece.classList.add('moving');
+  if (captured && toSquare) toSquare.querySelector('.piece')?.classList.add('captured');
+
+  playTone(captured ? 'capture' : 'move');
+  boardEl.classList.remove('pop');
+  await new Promise(resolve=>setTimeout(resolve,340));
   animationBusy=false;
 
-  halfmoveClock = (type(p)==='p' || captured) ? 0 : halfmoveClock + 1;
   turn=other(turn);
-  const key=positionKey();
-  repetitionCounts[key]=(repetitionCounts[key]||0)+1;
   render();
   updateStatus();
   startClock();
 
-  if (online.connected && online.started && !fromRemote) sendOnline({type:'move', room:online.room, color:online.color, move});
+  if (online.connected && !fromRemote) sendOnline({type:'move', room:online.room, color:online.color, move});
 
   if (!gameOver && !online.connected && modeEl.value === 'computer' && turn === 'b' && smartMode) {
-    if (computerTimer) clearTimeout(computerTimer);
-    computerTimer=setTimeout(()=>{ computerTimer=null; computerMove(); },420);
+    computerTimer=setTimeout(computerMove,420);
   }
 }
 
-function aiApplyMove(move){
-  const snapshot={
-    board:board,
-    turn:turn,
-    castling:JSON.parse(JSON.stringify(castling)),
-    enPassant:enPassant ? [...enPassant] : null
-  };
-  const p=board[move.fr][move.fc];
-  updateCastlingRights(move.fr,move.fc,move.tr,move.tc,p);
-  board=applyMoveToBoard(board,move);
-  enPassant=move.doublePawn ? [(move.fr+move.tr)/2,move.fc] : null;
-  turn=other(turn);
-  return snapshot;
-}
-
-function aiRestore(snapshot){
-  board=snapshot.board;
-  turn=snapshot.turn;
-  castling=snapshot.castling;
-  enPassant=snapshot.enPassant;
-}
-
-const AI_PST={
-  p:[0,0,0,0,0,0,0,0, 5,8,8,-5,-5,8,8,5, 1,2,3,6,6,3,2,1, 0,0,0,12,12,0,0,0, 1,1,2,15,15,2,1,1, 2,3,6,8,8,6,3,2, 5,5,5,-8,-8,5,5,5, 0,0,0,0,0,0,0,0],
-  n:[-5,-4,-3,-3,-3,-3,-4,-5, -4,-2,0,1,1,0,-2,-4, -3,1,3,4,4,3,1,-3, -3,1,4,5,5,4,1,-3, -3,1,4,5,5,4,1,-3, -3,1,3,4,4,3,1,-3, -4,-2,0,1,1,0,-2,-4, -5,-4,-3,-3,-3,-3,-4,-5],
-  b:[-3,-2,-2,-2,-2,-2,-2,-3, -2,2,0,0,0,0,2,-2, -2,4,5,2,2,5,4,-2, -2,2,5,6,6,5,2,-2, -2,4,5,6,6,5,4,-2, -2,2,5,2,2,5,2,-2, -2,0,0,0,0,0,0,-2, -3,-2,-2,-2,-2,-2,-2,-3],
-  r:[0,0,2,4,4,2,0,0, 0,0,2,4,4,2,0,0, 0,0,2,4,4,2,0,0, 1,1,2,5,5,2,1,1, 1,1,2,5,5,2,1,1, 0,0,2,4,4,2,0,0, 0,0,2,4,4,2,0,0, 0,0,2,4,4,2,0,0],
-  q:[-2,-1,-1,0,0,-1,-1,-2, -1,0,1,2,2,1,0,-1, -1,1,2,3,3,2,1,-1, 0,0,2,3,3,2,0,0, -1,1,2,3,3,2,1,-1, -1,0,1,2,2,1,0,-1, -2,-1,-1,0,0,-1,-1,-2, -2,-1,-1,0,0,-1,-1,-2],
-  k:[-4,-5,-5,-6,-6,-5,-5,-4, -4,-5,-5,-6,-6,-5,-5,-4, -4,-5,-5,-6,-6,-5,-5,-4, -4,-5,-5,-6,-6,-5,-5,-4, -2,-3,-3,-4,-4,-3,-3,-2, 2,2,0,0,0,0,2,2, 4,5,3,1,1,3,5,4, 4,5,3,1,1,3,5,4]
-};
-
-function aiEvaluate(){
-  let score=0, whiteMaterial=0, blackMaterial=0, whiteBishops=0, blackBishops=0;
-  for(let r=0;r<8;r++) for(let c=0;c<8;c++){
-    const p=board[r][c]; if(!p) continue;
-    const col=color(p), t=type(p), base=VALUE[t]*100;
-    const idx=col==='b' ? r*8+c : (7-r)*8+c;
-    const pst=(AI_PST[t]||[])[idx]||0;
-    const v=base+pst;
-    if(col==='b'){score+=v;blackMaterial+=base;if(t==='b')blackBishops++;}
-    else {score-=v;whiteMaterial+=base;if(t==='b')whiteBishops++;}
-  }
-  if(blackBishops>=2) score+=28;
-  if(whiteBishops>=2) score-=28;
-
-  // Passed-pawn and pawn-island pressure.
-  for(let c=0;c<8;c++){
-    let wp=0,bp=0;
-    for(let r=0;r<8;r++){if(board[r][c]==='wp')wp++;if(board[r][c]==='bp')bp++;}
-    if(bp>1) score-=8*(bp-1); // black doubled pawns
-    if(wp>1) score+=8*(wp-1);
-  }
-
-  // Mobility and king safety are intentionally modest so material remains stable.
-  const oldTurn=turn;
-  const bm=allLegalMoves('b').length;
-  const wm=allLegalMoves('w').length;
-  turn=oldTurn;
-  score += (bm-wm)*3;
-  if(inCheck(board,'w')) score+=35;
-  if(inCheck(board,'b')) score-=35;
-  if(whiteMaterial+blackMaterial<900) score*=0.92;
-  return score;
-}
-
-function aiMoveScore(m){
-  const p=board[m.fr][m.fc], captured=m.enPassant ? 'p' : board[m.tr][m.tc];
-  let s=0;
-  if(captured) s += VALUE[type(captured)]*1000 - VALUE[type(p)]*20;
-  if(m.promotion) s+=900;
-  if(m.castle) s+=60;
-  const center=3.5-Math.abs(3.5-m.tr)+3.5-Math.abs(3.5-m.tc);
-  s+=center*8;
-  return s;
-}
-
-function aiOrderedMoves(col){
-  return allLegalMoves(col).sort((a,b)=>aiMoveScore(b)-aiMoveScore(a));
-}
-
-function aiSearch(depth, alpha, beta, deadline, maximizing){
-  if(performance.now()>deadline) throw new Error('AI_TIMEOUT');
-  const moves=aiOrderedMoves(turn);
-  if(!moves.length){
-    if(inCheck(board,turn)) return turn==='b' ? -100000-depth : 100000+depth;
-    return 0;
-  }
-  if(depth<=0) return aiEvaluate();
-
-  if(maximizing){
-    let best=-Infinity;
-    for(const m of moves){
-      const snap=aiApplyMove(m);
-      let v;
-      try {
-        v=aiSearch(depth-1,alpha,beta,deadline,turn==='b');
-      } finally {
-        aiRestore(snap);
-      }
-      if(v>best)best=v;
-      if(best>alpha)alpha=best;
-      if(alpha>=beta)break;
+function computerMove() {
+  if (gameOver || turn !== 'b' || paused) return;
+  const moves=allLegalMoves('b');
+  if(!moves.length){updateStatus();return;}
+  let bestMove=moves[0],bestScore=-Infinity;
+  for(const m of moves){
+    const next=applyMoveToBoard(board,m);
+    let score=evaluatePosition(next);
+    if(inCheck(next,'w'))score+=7;
+    if(board[m.tr][m.tc])score+=VALUE[type(board[m.tr][m.tc])]*9;
+    if(aiDepth>1){
+      const reply=minimax(next,aiDepth-1,false);
+      score+=reply*0.75;
     }
-    return best;
-  } else {
-    let best=Infinity;
-    for(const m of moves){
-      const snap=aiApplyMove(m);
-      let v;
-      try {
-        v=aiSearch(depth-1,alpha,beta,deadline,turn==='b');
-      } finally {
-        aiRestore(snap);
-      }
-      if(v<best)best=v;
-      if(best<beta)beta=best;
-      if(alpha>=beta)break;
-    }
-    return best;
+    score+=Math.random()*0.08;
+    if(score>bestScore){bestScore=score;bestMove=m}
   }
-}
-
-function chooseAIMove(){
-  const cfg=AI_CONFIG[aiLevel]||AI_CONFIG.medium;
-  const root=aiOrderedMoves('b');
-  if(!root.length)return null;
-  if(cfg.maxDepth<=1){
-    root.sort((a,b)=>aiMoveScore(b)-aiMoveScore(a));
-    const pool=root.slice(0,Math.min(4,root.length));
-    return pool[Math.floor(Math.random()*pool.length)]||root[0];
-  }
-
-  const deadline=performance.now()+cfg.timeMs;
-  let best=root[0];
-  try{
-    for(let depth=1;depth<=cfg.maxDepth;depth++){
-      let depthBest=best, depthScore=-Infinity;
-      const candidates=aiOrderedMoves('b');
-      for(const m of candidates){
-        if(performance.now()>deadline)throw new Error('AI_TIMEOUT');
-        const snap=aiApplyMove(m);
-        let score;
-        try {
-          score=aiSearch(depth-1,-Infinity,Infinity,deadline,false);
-        } finally {
-          aiRestore(snap);
-        }
-        if(score>depthScore){depthScore=score;depthBest=m;}
-      }
-      best=depthBest;
-    }
-  }catch(e){
-    if(e.message!=='AI_TIMEOUT') throw e;
-  }
-  return best;
-}
-
-function computerMove(){
-  if(computerThinking) return;
-  if(gameOver || turn!=='b' || paused || online.connected || modeEl.value!=='computer' || !smartMode) return;
-
-  computerThinking=true;
-  try {
-    const move=chooseAIMove();
-    // The search must never leave the real board in a search position.
-    // Re-check everything against the current board before allowing the AI to move.
-    if(gameOver || turn!=='b' || paused || online.connected || modeEl.value!=='computer' || !smartMode || !move) return;
-    if(color(board[move.fr][move.fc])!=='b') return;
-    if(board[move.tr][move.tc] && color(board[move.tr][move.tc])==='b') return;
-    const legal=allLegalMoves('b').some(m=>m.fr===move.fr && m.fc===move.fc && m.tr===move.tr && m.tc===move.tc && !!m.castle===!!move.castle && !!m.enPassant===!!move.enPassant);
-    if(!legal) return;
-    makeMove(move,false,true);
-  } finally {
-    computerThinking=false;
-  }
+  makeMove(bestMove);
 }
 
 function updateStatus() {
-  if(gameOver) return;
   const moves=allLegalMoves(turn);
   const check=inCheck(board,turn);
 
@@ -657,22 +378,16 @@ function updateStatus() {
       statusEl.textContent='کیش‌ومات!';
       modalTitleEl.textContent='کیش‌ومات';
       modalTextEl.textContent=turn==='w' ? 'سیاه برنده شد.' : 'سفید برنده شد.';
-      playTone('win');
-      if(!gameResultAwarded){ gameResultAwarded=true; awardResult('loss'); }
+      awardResult('loss');
     } else {
       statusEl.textContent='پات؛ بازی مساوی شد.';
       modalTitleEl.textContent='مساوی';
       modalTextEl.textContent='حرکت قانونی باقی نمانده است.';
-      playTone('draw');
-      if(!gameResultAwarded){ gameResultAwarded=true; awardResult('draw'); }
+      awardResult('draw');
     }
     setTimeout(showModal,180);
     return;
   }
-
-  if((repetitionCounts[positionKey()]||0)>=3){ finishDraw('سه‌بار تکرار','بازی مساوی شد؛ وضعیت سه بار تکرار شده است.'); return; }
-  if(halfmoveClock>=100){ finishDraw('قانون ۵۰ حرکت','بازی مساوی شد؛ ۵۰ حرکت بدون گرفتن مهره یا حرکت سرباز انجام شد.'); return; }
-  if(isInsufficientMaterial()){ finishDraw('مهره کافی نیست','بازی مساوی شد؛ مهره کافی برای کیش‌ومات وجود ندارد.'); return; }
 
   statusEl.classList.toggle('alert', check);
   if(check) playTone('check');
@@ -680,6 +395,7 @@ function updateStatus() {
 }
 
 function render() {
+  const stableScroll = window.scrollY;
   boardEl.replaceChildren();
   const rows=[0,1,2,3,4,5,6,7];
   const cols=[0,1,2,3,4,5,6,7];
@@ -713,437 +429,362 @@ function render() {
       piece.draggable=false;
       piece.dataset.r=r; piece.dataset.c=c;
       square.appendChild(piece);
+      bindDrag(piece,r,c);
     }
+    square.addEventListener('pointerdown',e=>beginPointer(e,r,c));
     square.addEventListener('click',()=>handleSquareClick(r,c));
     boardEl.appendChild(square);
   }
 
   whitePlayer.classList.toggle('active',turn==='w');
   blackPlayer.classList.toggle('active',turn==='b');
-  updateMovePanel();
+  boardEl.classList.remove('pop');
+  void boardEl.offsetWidth;
+  requestAnimationFrame(()=>{ if(Math.abs(window.scrollY-stableScroll)>2) window.scrollTo({top:stableScroll,behavior:'instant'}); });
 }
 
-
-function squareName(r,c){ return 'abcdefgh'[c] + (8-r); }
-function updateMovePanel(){
-  const countEl=document.getElementById('moveCount');
-  const listEl=document.getElementById('moveList');
-  const wm=document.getElementById('whiteMoveCount');
-  const bm=document.getElementById('blackMoveCount');
-  if(!listEl) return;
-  if(countEl) countEl.textContent=moveLog.length;
-  if(wm) wm.textContent=moveLog.filter(m=>m.color==='w').length;
-  if(bm) bm.textContent=moveLog.filter(m=>m.color==='b').length;
-  if(!moveLog.length){ listEl.innerHTML='<div class="empty-moves">هنوز حرکتی انجام نشده</div>'; return; }
-  listEl.innerHTML=moveLog.map((m,i)=>{
-    const label=(i%2===0 ? ((i>>1)+1)+'. ' : '') + squareName(m.fr,m.fc)+' → '+squareName(m.tr,m.tc) + (m.captured?' ×':'');
-    return `<div class="move-row ${m.color==='w'?'white-move':'black-move'}"><span>${label}</span><small>${m.captured?'گرفتن':'حرکت'}</small></div>`;
-  }).join('');
-  listEl.scrollTop=listEl.scrollHeight;
-}
-
-function showLegalHintsDirect(r,c){
-  const moves=legalMoves(r,c);
-  const byTarget=new Map(moves.map(m=>[m.tr+':'+m.tc,m]));
-  boardEl.querySelectorAll('.square').forEach(sq=>{
-    const rr=Number(sq.dataset.r),cc=Number(sq.dataset.c);
-    const m=byTarget.get(rr+':'+cc);
-    sq.classList.toggle('move',!!m && !board[rr][cc]);
-    sq.classList.toggle('capture',!!m && !!board[rr][cc]);
-  });
-}
-
-function refreshSelectionUI(){
-  const squares=boardEl.querySelectorAll('.square');
-  const targetMoves=selected ? legalMoves(selected[0],selected[1]) : [];
-  const byTarget=new Map(targetMoves.map(m=>[m.tr+':'+m.tc,m]));
-  squares.forEach(square=>{
-    const r=Number(square.dataset.r), c=Number(square.dataset.c);
-    square.classList.toggle('selected',!!selected && selected[0]===r && selected[1]===c);
-    const move=byTarget.get(r+':'+c);
-    square.classList.toggle('move',!!move && !board[r][c]);
-    square.classList.toggle('capture',!!move && !!board[r][c]);
-  });
-}
-
-// V22: the original/simple chess interaction — tap a piece, then tap a destination.
-// Dragging is intentionally disabled. Legal-move dots remain visible and clickable.
 function handleSquareClick(r,c) {
   if (gameOver || animationBusy || paused) return;
-  // Offline AI mode: the player controls White only. Never let a tap play Black.
-  if (!online.connected && modeEl.value === 'computer' && turn !== 'w') return;
-  if (online.connected && !online.started) return;
-  if (online.connected && online.started && turn !== online.color) return;
-
   if (selected) {
     const moves=legalMoves(selected[0],selected[1]);
-    const move=moves.find(m=>m.tr===r && m.tc===c);
-    if (move) { makeMove(move); return; }
-    if (board[r][c] && color(board[r][c])===turn) {
-      selected=[r,c];
-      refreshSelectionUI();
-      playTone('pick');
-      return;
-    }
-    selected=null;
-    refreshSelectionUI();
-    return;
+    const move=moves.find(m=>m.tr===r&&m.tc===c);
+    if(move){ makeMove(move); return; }
+    if(board[r][c] && color(board[r][c])===turn){selected=[r,c];render();return;}
+    selected=null;render();return;
   }
-
-  if (board[r][c] && color(board[r][c])===turn) {
-    selected=[r,c];
-    refreshSelectionUI();
-    playTone('pick');
-  }
+  if(board[r][c] && color(board[r][c])===turn){selected=[r,c];render();}
 }
 
-// No pointer-drag handlers in V22. Keeping the board as a click/tap target avoids
-// Android gesture conflicts and prevents the board from being rebuilt while selecting.
-function bindDrag(){ /* intentionally disabled in V22 */ }
+function beginPointer(e,r,c){
+  if(gameOver||animationBusy||paused) return;
+  if(!board[r][c] || color(board[r][c])!==turn) return;
+  dragState={r,c,id:e.pointerId,startX:e.clientX,startY:e.clientY,dragging:false};
+  const el=e.currentTarget;
+  try{el.setPointerCapture(e.pointerId)}catch(_){}
+  el.addEventListener('pointermove',pointerMove);
+  el.addEventListener('pointerup',pointerUp,{once:true});
+  el.addEventListener('pointercancel',pointerCancel,{once:true});
+}
 
-// ===== CORE UI / PROFILE / CLOCK SAFETY =====
-const splashEl=document.getElementById('splash');
-const settingsPanel=document.getElementById('settings');
-const profilePanel=document.getElementById('profilePanel');
-const onlinePanel=document.getElementById('onlinePanel');
-const rankPanel=document.getElementById('rankPanel');
-const clanPanel=document.getElementById('clanPanel');
-const clanChatPanel=document.getElementById('clanChatPanel');
-const playerName=document.getElementById('playerName');
-const avatarSelect=document.getElementById('avatarSelect');
-const whitePlayer=document.getElementById('whitePlayer');
-const blackPlayer=document.getElementById('blackPlayer');
-const blackLabel=document.getElementById('blackLabel');
+function pointerMove(e){
+  if(!dragState) return;
+  const dx=e.clientX-dragState.startX,dy=e.clientY-dragState.startY;
+  if(!dragState.dragging && Math.hypot(dx,dy)<7) return;
+  dragState.dragging=true;
+  const ghost=document.getElementById('dragGhost');
+  const p=board[dragState.r][dragState.c];
+  ghost.textContent=PIECES[color(p)][type(p)];
+  ghost.className='drag-ghost show '+(color(p)==='w'?'white':'black');
+  ghost.style.left=(e.clientX-36)+'px';ghost.style.top=(e.clientY-42)+'px';
+  selected=[dragState.r,dragState.c];render();
+}
+
+function pointerUp(e){
+  if(!dragState)return;
+  const state=dragState;dragState=null;
+  document.getElementById('dragGhost').className='drag-ghost';
+  if(!state.dragging)return;
+  const el=document.elementFromPoint(e.clientX,e.clientY)?.closest('.square');
+  if(!el)return;
+  const r=Number(el.dataset.r),c=Number(el.dataset.c);
+  const moves=legalMoves(state.r,state.c);
+  const move=moves.find(m=>m.tr===r&&m.tc===c);
+  if(move) makeMove(move); else {selected=null;render();}
+}
+function pointerCancel(){dragState=null;document.getElementById('dragGhost').className='drag-ghost';}
+function bindDrag(piece,r,c){
+  // Pointer events on the square handle the actual drag; this keeps touch reliable.
+}
+
+function playTone(kind='move') {
+  if (!soundOn) return;
+  try{
+    const AudioCtx=window.AudioContext||window.webkitAudioContext;if(!AudioCtx)return;
+    const ctx=new AudioCtx(),gain=ctx.createGain(),osc=ctx.createOscillator();
+    const freq=kind==='capture'?190:(kind==='check'?520:330);
+    osc.frequency.value=freq;osc.type=kind==='capture'?'triangle':'sine';
+    gain.gain.value=.045;osc.connect(gain);gain.connect(ctx.destination);
+    osc.start();osc.stop(ctx.currentTime+(kind==='capture'?.11:.07));
+  }catch(_){}
+}
+
+function formatTime(s){
+  s=Math.max(0,Math.ceil(s));
+  return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');
+}
+function updateClocks(){
+  whiteClock.textContent=formatTime(clockSeconds.w);
+  blackClock.textContent=formatTime(clockSeconds.b);
+  whiteClock.style.color=clockSeconds.w<=10&&turn==='w'?'#ff8b8b':'';
+  blackClock.style.color=clockSeconds.b<=10&&turn==='b'?'#ff8b8b':'';
+}
+function startClock(){
+  stopClock();
+  if(gameOver||paused)return;
+  clockTimer=setInterval(()=>{
+    clockSeconds[turn]-=1;updateClocks();
+    if(clockSeconds[turn]<=0){
+      clockSeconds[turn]=0;gameOver=true;stopClock();
+      modalTitleEl.textContent='زمان تمام شد';
+      modalTextEl.textContent=turn==='w'?'زمان سفید تمام شد؛ سیاه برنده شد.':'زمان سیاه تمام شد؛ سفید برنده شد.';
+      awardResult('loss');
+      showModal();
+    }
+  },1000);
+}
+function stopClock(){if(clockTimer){clearInterval(clockTimer);clockTimer=null;}}
+function undoMove(){
+  if(animationBusy||!history.length||gameOver)return;
+  const s=history.pop();
+  board=s.board;turn=s.turn;castling=s.castling;enPassant=s.enPassant;
+  clockSeconds=s.clockSeconds;lastMove=s.lastMove;selected=null;gameOver=false;
+  hideModal();render();updateClocks();updateStatus();
+}
+function togglePause(){
+  if(gameOver)return;
+  paused=!paused;
+  if(paused){stopClock();pauseOverlay.classList.add('show')}
+  else {hidePause();startClock()}
+}
+function hidePause(){pauseOverlay.classList.remove('show')}
+function hideSettings(){settingsPanel.classList.remove('show');settingsPanel.setAttribute('aria-hidden','true')}
+
+function showModal() {
+  modalEl.classList.add('show');
+  modalEl.setAttribute('aria-hidden','false');
+}
+
+function hideModal() {
+  modalEl.classList.remove('show');
+  modalEl.setAttribute('aria-hidden','true');
+}
+
 
 function loadProfile(){
   try{
-    const raw=localStorage.getItem('tomtom_profile');
-    if(raw){ profile={...profile,...JSON.parse(raw)}; }
-  }catch(_){ }
-}
-function saveProfileData(){
-  try{localStorage.setItem('tomtom_profile',JSON.stringify(profile));}catch(_){ }
-  const pn=document.getElementById('profileName'), pa=document.getElementById('profileAvatar');
-  const rating=document.getElementById('rating'), xp=document.getElementById('xp'), level=document.getElementById('level');
-  if(pn)pn.textContent=profile.name;
-  if(pa)pa.textContent=profile.avatar;
-  if(rating)rating.textContent=profile.rating;
-  if(xp)xp.textContent=profile.xp;
-  if(level)level.textContent=profile.level;
-  for(const [id,val] of [['wins',profile.wins],['losses',profile.losses],['draws',profile.draws]]){const el=document.getElementById(id);if(el)el.textContent=val}
-}
-function awardResult(result){
-  if(result==='win'){profile.wins++;profile.rating+=10;profile.xp+=25}
-  else if(result==='loss'){profile.losses++;profile.rating=Math.max(0,profile.rating-8);profile.xp+=8}
-  else {profile.draws++;profile.xp+=12}
-  while(profile.xp>=100){profile.xp-=100;profile.level++}
-  saveProfileData();
-  if(typeof window.tomtomSyncResult==='function') window.tomtomSyncResult(result);
-  if(typeof window.tomtomClanResult==='function' && online.connected && online.started) window.tomtomClanResult(result);
-}
-function updateClocks(){
-  const f=s=>`${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
-  const w=document.getElementById('whiteClock'),b=document.getElementById('blackClock');
-  if(w)w.textContent=f(clockSeconds.w);if(b)b.textContent=f(clockSeconds.b);
-}
-function stopClock(){if(clockTimer){clearInterval(clockTimer);clockTimer=null}}
-function startClock(){stopClock();if(gameOver||paused)return;clockTimer=setInterval(()=>{if(gameOver||paused){stopClock();return}clockSeconds[turn]--;updateClocks();if(clockSeconds[turn]<=0){clockSeconds[turn]=0;gameOver=true;stopClock();const winner=other(turn);statusEl.textContent=winner==='w'?'زمان تمام شد؛ سفید برنده شد.':'زمان تمام شد؛ سیاه برنده شد.';modalTitleEl.textContent='زمان تمام شد';modalTextEl.textContent=winner==='w'?'سفید برنده شد.':'سیاه برنده شد.';if(!gameResultAwarded){gameResultAwarded=true;awardResult(winner==='w'?'win':'loss');}setTimeout(showModal,100)}} ,1000)}
-function showModal(){if(modalEl){modalEl.classList.add('show');modalEl.setAttribute('aria-hidden','false')}}
-function hideModal(){if(modalEl){modalEl.classList.remove('show');modalEl.setAttribute('aria-hidden','true')}}
-function hidePause(){const e=document.getElementById('pauseOverlay');if(e){e.classList.remove('show');e.setAttribute('aria-hidden','true')}}
-function hideSettings(){document.querySelectorAll('.settings.show').forEach(e=>{e.classList.remove('show');e.setAttribute('aria-hidden','true')})}
-function showPanel(panel){closeAllPanels();if(panel){panel.classList.add('show');panel.setAttribute('aria-hidden','false')}}
-function ensureAudio(){try{if(!window._audioCtx)window._audioCtx=new (window.AudioContext||window.webkitAudioContext)();if(window._audioCtx.state==='suspended'){const r=window._audioCtx.resume();if(r&&r.catch)r.catch(()=>{})}return window._audioCtx}catch(_){return null}}
-function playTone(kind){
-  if(!soundOn)return;
-  try{
-    const ctx=ensureAudio(); if(!ctx)return;
-    const now=ctx.currentTime, vol=Math.max(.05,Math.min(1,masterVolume));
-    const presets={
-      pick:{dur:.045,gain:.16,freq:2100,q:3},
-      move:{dur:.085,gain:.34,freq:850,q:1.7},
-      capture:{dur:.16,gain:.52,freq:520,q:1.2},
-      castle:{dur:.10,gain:.30,freq:700,q:1.5},
-      promote:{dur:.12,gain:.34,freq:1250,q:2},
-      check:{dur:.12,gain:.40,freq:1450,q:3},
-      win:{dur:.12,gain:.38,freq:950,q:1.8},
-      draw:{dur:.12,gain:.30,freq:500,q:1.5}
-    }[kind]||{dur:.08,gain:.3,freq:850,q:1.5};
-    const hit=(delay,scale=1)=>{
-      const n=Math.max(1,Math.floor(ctx.sampleRate*presets.dur));
-      const buf=ctx.createBuffer(1,n,ctx.sampleRate), data=buf.getChannelData(0);
-      for(let i=0;i<n;i++){
-        const t=i/ctx.sampleRate, env=Math.exp(-t*(32+presets.q*7));
-        data[i]=(Math.random()*2-1)*env;
-      }
-      const src=ctx.createBufferSource(), filter=ctx.createBiquadFilter(), g=ctx.createGain();
-      src.buffer=buf; filter.type='bandpass'; filter.frequency.value=presets.freq; filter.Q.value=presets.q;
-      g.gain.setValueAtTime(.0001,now+delay);
-      g.gain.exponentialRampToValueAtTime(Math.max(.0001,presets.gain*scale*vol),now+delay+.004);
-      g.gain.exponentialRampToValueAtTime(.0001,now+delay+presets.dur);
-      src.connect(filter); filter.connect(g); g.connect(ctx.destination); src.start(now+delay); src.stop(now+delay+presets.dur+.01);
-    };
-    hit(0,1);
-    if(kind==='capture')hit(.045,.72);
-    if(kind==='castle')hit(.12,.78);
-    if(kind==='promote')hit(.14,.65);
-    if(kind==='win'){hit(.16,.8);hit(.32,.65)}
+    const saved=JSON.parse(localStorage.getItem('tomtom_profile')||'null');
+    if(saved)profile={...profile,...saved};
   }catch(_){}
 }
-function unlockAudio(){if(audioUnlocked)return;audioUnlocked=true;try{const ctx=ensureAudio();if(ctx){const o=ctx.createOscillator(),g=ctx.createGain();g.gain.setValueAtTime(0.0001,ctx.currentTime);o.connect(g);g.connect(ctx.destination);o.start();o.stop(ctx.currentTime+0.02)}}catch(_){};if(musicOn)setMusic(true);}
-
-
-function applyAudioSettings(){
-  const musicEl=document.getElementById('musicEnabled'), volEl=document.getElementById('masterVolume'), volOut=document.getElementById('masterVolumeValue');
-  if(musicEl) musicEl.checked=false;
-  if(volEl) volEl.value=Math.round(masterVolume*100);
-  if(volOut) volOut.value=Math.round(masterVolume*100)+'٪';
+function saveProfileData(){
+  try{localStorage.setItem('tomtom_profile',JSON.stringify(profile));}catch(_){}
+  profileName.textContent=profile.name;
+  profileAvatar.textContent=profile.avatar;
+  level.textContent=profile.level;
+  xp.textContent=profile.xp;
+  rating.textContent=profile.rating;
+  wins.textContent=profile.wins;losses.textContent=profile.losses;draws.textContent=profile.draws;
 }
-function loadAudioSettings(){
-  try{
-    const raw=JSON.parse(localStorage.getItem('tomtom_audio')||'null');
-    if(raw){
-      soundOn=raw.soundOn!==false;
-      masterVolume=Math.max(0,Math.min(1,Number(raw.volume)||.7));
-    }
-  }catch(_){ soundOn=true; }
-  musicOn=false;
-  applyAudioSettings();
-  if(soundBtn) soundBtn.textContent=soundOn?'🔊':'🔇';
-}
-function saveAudioSettings(){
-  try{localStorage.setItem('tomtom_audio',JSON.stringify({soundOn,volume:masterVolume}));}catch(_){}
-  applyAudioSettings();
-}
-function setMusic(on){
-  musicOn=false;
-  const m=window.tomtomPiano;
-  if(m){try{m.pause();m.currentTime=0;}catch(_) {}}
-}
-loadAudioSettings();
-
-// The splash must never trap the user behind a loader. Hide it after the app initializes.
-function finishSplash(){if(!splashEl)return;splashEl.classList.add('hide');setTimeout(()=>splashEl.remove(),180)}
-
-
-function closeCurrentPanel(){
-  const st=navState();
-  if(st==='online'||st==='profile'||st==='rank'||st==='settings'){ window.history.back(); }
-  else { closeAllPanels(); }
+function awardResult(result){
+  if(result==='win'){profile.wins++;profile.rating+=12;profile.xp+=35}
+  else if(result==='loss'){profile.losses++;profile.rating=Math.max(100,profile.rating-10);profile.xp+=8}
+  else {profile.draws++;profile.xp+=18}
+  while(profile.xp>=100){profile.xp-=100;profile.level++}
+  saveProfileData();
+  if (typeof window.tomtomSyncResult === 'function') window.tomtomSyncResult(result);
 }
 
-// Core controls
-if(againBtn)againBtn.addEventListener('click',resetGame);
-const closeModalBtn=document.getElementById('closeModal');if(closeModalBtn)closeModalBtn.addEventListener('click',hideModal);
-const pauseBtn=document.getElementById('pauseBtn'),resumeBtn=document.getElementById('resumeBtn'),pauseOverlay=document.getElementById('pauseOverlay');
-if(pauseBtn)pauseBtn.addEventListener('click',()=>{if(gameOver)return;paused=true;stopClock();pauseOverlay?.classList.add('show')});
-if(resumeBtn)resumeBtn.addEventListener('click',()=>{paused=false;pauseOverlay?.classList.remove('show');startClock();render()});
-if(soundBtn)soundBtn.addEventListener('click',()=>{ensureAudio();soundOn=!soundOn;soundBtn.textContent=soundOn?'🔊':'🔇';footerEl.textContent=soundOn?'TOMTOM CHESS PRO • صدا روشن است.':'TOMTOM CHESS PRO • صدا خاموش است.';if(soundOn)playTone('pick');saveAudioSettings()});
-const flipBtn=document.getElementById('flipBtn');if(flipBtn)flipBtn.addEventListener('click',()=>{boardFlipped=!boardFlipped;render()});
-const undoBtn=document.getElementById('undoBtn');if(undoBtn)undoBtn.addEventListener('click',()=>{
-  if(!moveHistory.length || online.connected) return;
-  let h=moveHistory.pop();
-  board=h.board;turn=h.turn;castling=h.castling;enPassant=h.enPassant;clockSeconds=h.clockSeconds;lastMove=h.lastMove;halfmoveClock=h.halfmoveClock||0;repetitionCounts={...(h.repetitionCounts||{})};moveLog.pop();
-  // In computer mode, undo both the computer reply and the player's last move.
-  if(modeEl.value==='computer' && turn==='b' && moveHistory.length){
-    h=moveHistory.pop();
-    board=h.board;turn=h.turn;castling=h.castling;enPassant=h.enPassant;clockSeconds=h.clockSeconds;lastMove=h.lastMove;halfmoveClock=h.halfmoveClock||0;repetitionCounts={...(h.repetitionCounts||{})};
-    moveLog.pop();
+function minimax(boardState, depth, maximizing, alpha=-Infinity, beta=Infinity){
+  if(depth<=0)return evaluatePosition(boardState);
+  const old=board; board=boardState;
+  const col=maximizing?'b':'w';
+  const moves=allLegalMoves(col);
+  board=old;
+  if(!moves.length)return maximizing ? -100000 : 100000;
+  let best=maximizing?-Infinity:Infinity;
+  for(const m of moves){
+    const next=applyMoveToBoard(boardState,m);
+    const value=minimax(next,depth-1,!maximizing,alpha,beta);
+    if(maximizing){best=Math.max(best,value);alpha=Math.max(alpha,value)}
+    else{best=Math.min(best,value);beta=Math.min(beta,value)}
+    if(beta<=alpha)break;
   }
-  selected=null;gameOver=false;gameResultAwarded=false;render();updateClocks();updateStatus();startClock();
-});
-const settingsBtn=document.getElementById('settingsBtn');if(settingsBtn)settingsBtn.addEventListener('click',()=>showPanel(settingsPanel));
-const closeSettingsBtn=document.getElementById('closeSettings');if(closeSettingsBtn)closeSettingsBtn.addEventListener('click',closeCurrentPanel);
-const closeProfileBtn=document.getElementById('closeProfile');if(closeProfileBtn)closeProfileBtn.addEventListener('click',closeCurrentPanel);
-const saveProfileBtn=document.getElementById('saveProfile');if(saveProfileBtn)saveProfileBtn.addEventListener('click',()=>{profile.name=(playerName.value||'TOMTOM PLAYER').trim()||'TOMTOM PLAYER';profile.avatar=avatarSelect.value;saveProfileData();profilePanel.classList.remove('show');profilePanel.setAttribute('aria-hidden','true');if(homeRatingEl)homeRatingEl.textContent=profile.rating});
-const profileBtn=document.getElementById('profileBtn');if(profileBtn)profileBtn.addEventListener('click',()=>{playerName.value=profile.name;avatarSelect.value=profile.avatar;showPanel(profilePanel)});
-const aiLevelEl=document.getElementById('aiLevel');
-const aiLevelNote=document.getElementById('aiLevelNote');
-const AI_NOTES={weak:'ضعیف: حرکت‌های ساده و سریع.',medium:'متوسط: بازی متعادل و سریع.',strong:'قوی: جست‌وجوی عمیق‌تر و تاکتیک‌های بهتر.', 'very-strong':'خیلی قوی: جست‌وجوی عمیق‌تر با ارزیابی موقعیتی.', king:'پادشاه: بالاترین سطح داخلی بازی؛ برای سخت‌ترین رقابت محلی.'};
-function updateAILevelNote(){if(aiLevelNote)aiLevelNote.textContent=AI_NOTES[aiLevelEl?.value||aiLevel]||'';}
-if(aiLevelEl){aiLevelEl.value=aiLevel;aiLevelEl.addEventListener('change',()=>{aiLevel=aiLevelEl.value;updateAILevelNote();});}
-updateAILevelNote();
-const musicEnabledEl=document.getElementById('musicEnabled');const masterVolumeEl=document.getElementById('masterVolume');const masterVolumeValue=document.getElementById('masterVolumeValue');if(masterVolumeEl)masterVolumeEl.addEventListener('input',()=>{masterVolume=Math.max(0,Math.min(1,Number(masterVolumeEl.value)/100));if(masterVolumeValue)masterVolumeValue.value=Math.round(masterVolume*100)+'٪';applyAudioSettings();});if(musicEnabledEl)musicEnabledEl.addEventListener('change',()=>{musicEnabledEl.checked=false;musicOn=false;setMusic(false);});const saveSettingsBtn=document.getElementById('saveSettings');if(saveSettingsBtn)saveSettingsBtn.addEventListener('click',()=>{timeControlSeconds=Number(document.getElementById('timeControl')?.value)||600;pieceSet=document.getElementById('pieceSet')?.value||'classic';smartMode=!!document.getElementById('smartMode')?.checked;aiLevel=aiLevelEl?.value||'medium';musicOn=false;saveAudioSettings();settingsPanel.classList.remove('show');settingsPanel.setAttribute('aria-hidden','true');resetGame()});
+  return best;
+}
+function evaluatePosition(b){
+  let score=0;
+  const center=[[3,3],[3,4],[4,3],[4,4]];
+  for(let r=0;r<8;r++)for(let c=0;c<8;c++){
+    const p=b[r][c];if(!p)continue;
+    let v=VALUE[type(p)];
+    if(type(p)==='p')v+= (color(p)==='b'?r:7-r)*0.08;
+    if(center.some(x=>x[0]===r&&x[1]===c))v+=0.18;
+    score += color(p)==='b'?v:-v;
+  }
+  return score;
+}
 
 
-// ===== ONLINE ARENA — CLEAN REBUILD =====
-function serverBase(){
-  let v=(localStorage.getItem('tomtom_server_url')||'https://tomtom-chess.onrender.com').trim();
-  return v.replace(/\/health$/i,'').replace(/\/$/,'');
+// ===== REAL ONLINE MULTIPLAYER =====
+function wsUrl(){
+  const proto=location.protocol==='https:'?'wss':'ws';
+  return `${proto}://${location.host}`;
 }
-function onlineWsUrl(){
-  const u=new URL(serverBase());
-  u.protocol=u.protocol==='https:'?'wss:':'ws:';
-  u.pathname='/ws';u.search='';u.hash='';
-  return u.toString();
+function setOnlineUI(text, connected=false){
+  if(onlineState) onlineState.textContent=text;
+  if(onlineDot) onlineDot.classList.toggle('connected',connected);
 }
-function sendOnline(msg){
-  const ws=online.ws;
-  if(!ws||ws.readyState!==WebSocket.OPEN)return false;
-  try{ws.send(JSON.stringify(msg));return true}catch(e){console.warn('sendOnline',e);return false}
-}
-function addChat(name,text,me=false){const box=document.getElementById('chatMessages');if(!box)return;box.querySelector('.chat-empty')?.remove();const el=document.createElement('div');el.className='chat-msg'+(me?' me':'');const b=document.createElement('b');b.textContent=me?'شما':name;const sp=document.createElement('span');sp.textContent=text;el.append(b,sp);box.appendChild(el);box.scrollTop=box.scrollHeight}
-function onlineUi(text){const el=document.getElementById('onlineState');if(el)el.textContent=text;const dot=document.getElementById('onlineDot');if(dot)dot.classList.toggle('connected',!!online.connected)}
-function rejectPending(message){const pending=window.__onlinePending||{};for(const key of Object.keys(pending)){try{pending[key].reject(new Error(message))}catch(_){}delete pending[key]}}
-function handleOnlineMessage(ws,m){
-  if(!m||typeof m!=='object')return;
-  if(m.type==='connected'){online.serverVersion=m.serverVersion||'unknown';online.serverReady=true;return}
-  if(m.type==='room_created'||m.type==='room_joined'){
-    online.room=m.room;online.color=m.color;online.started=false;
-    const rc=document.getElementById('roomCode');if(rc)rc.value=m.room;
-    const box=document.getElementById('roomMessage');if(box)box.textContent=m.type==='room_created'?'اتاق '+m.room+' ساخته شد؛ کد را برای بازیکن دوم بفرستید.':'با موفقیت وارد اتاق '+m.room+' شدید؛ منتظر حریف…';
-    const cs=document.getElementById('chatState');if(cs)cs.textContent='منتظر';
-  }else if(m.type==='room_state'){
-    const wasStarted=online.started;
-    online.room=m.room;online.started=!!m.started;
-    const rc=document.getElementById('roomCode');if(rc)rc.value=m.room;
-    const box=document.getElementById('roomMessage');if(box)box.textContent=m.started?'هر دو بازیکن آماده‌اند؛ بازی شروع شده است.':'منتظر بازیکن دوم…';
-    const cs=document.getElementById('chatState');if(cs)cs.textContent=m.started?'آنلاین':'منتظر';
-    const sb=document.getElementById('startOnlineGame');if(sb){sb.style.display=(!m.started&&m.players&&m.players.length>=2)?'block':'none';sb.disabled=!(m.players&&m.players.length>=2);}
-    if(m.started&&!wasStarted) resetGame();
-  }else if(m.type==='game_started'){
-    online.started=true;
-    const sb=document.getElementById('startOnlineGame');if(sb)sb.style.display='none';
-    const box=document.getElementById('roomMessage');if(box)box.textContent='🎮 بازی شروع شد؛ نوبت سفید است.';
-    const cs=document.getElementById('chatState');if(cs)cs.textContent='آنلاین';
-    // The online panel is only the lobby. When the server starts the match,
-    // actually switch both players into the chess screen before resetting it.
-    if(navState()!=='game') enterGameNav(); else showGameScreen();
-    resetGame();
-  }else if(m.type==='match_found'){
-    online.room=m.room;online.color=m.color;online.started=true;window.__tomtomSearching=false;
-    const mm=document.getElementById('matchmakeBtn');if(mm)mm.textContent='⚡ بازی سریع با حریف تصادفی';
-    const rc=document.getElementById('roomCode');if(rc)rc.value=m.room;
-    const box=document.getElementById('roomMessage');if(box)box.textContent='حریف پیدا شد؛ '+(m.color==='w'?'شما سفید هستید.':'شما سیاه هستید.');
-    const cs=document.getElementById('chatState');if(cs)cs.textContent='آنلاین';
-    if(navState()!=='game') enterGameNav(); else showGameScreen();
-    resetGame();
-  }else if(m.type==='match_waiting'){
-    const box=document.getElementById('roomMessage');if(box)box.textContent='⏳ در صف پیدا کردن حریف…';
-    const cs=document.getElementById('chatState');if(cs)cs.textContent='جستجو';
-  }else if(m.type==='match_cancelled'){
-    window.__tomtomSearching=false;const mm=document.getElementById('matchmakeBtn');if(mm)mm.textContent='⚡ بازی سریع با حریف تصادفی';
-    const box=document.getElementById('roomMessage');if(box)box.textContent='جستجوی حریف لغو شد.';
-  }else if(m.type==='remote_move'&&m.move){makeMove(m.move,true)}
-  else if(m.type==='new_game'){resetGame()}
-  else if(m.type==='resigned'){online.started=false;const box=document.getElementById('roomMessage');if(box)box.textContent='حریف تسلیم شد.'}
-  else if(m.type==='chat'&&m.color!==online.color){addChat(m.name||'حریف',m.text,false)}
-  else if(m.type==='opponent_left'){
-    online.started=false;const sb=document.getElementById('startOnlineGame');if(sb)sb.style.display='none';const box=document.getElementById('roomMessage');if(box)box.textContent='حریف از اتاق خارج شد.';const cs=document.getElementById('chatState');if(cs)cs.textContent='منتظر';
-  }else if(m.type==='error'){
-    const box=document.getElementById('roomMessage');if(box)box.textContent=m.message||'خطا از طرف سرور.';
-  }
-  const pending=window.__onlinePending||{};
-  if(m.reqId&&pending[m.reqId]){
-    if(m.type==='error')pending[m.reqId].reject(new Error(m.message||'خطای سرور'));
-    else if(['room_created','room_joined','match_found','match_waiting','match_cancelled','left_room','game_started'].includes(m.type))pending[m.reqId].resolve(m);
-  }
+function sendOnline(payload){
+  if(online.ws && online.ws.readyState===WebSocket.OPEN) online.ws.send(JSON.stringify(payload));
 }
 function connectOnline(){
-  if(online.ws&&[WebSocket.OPEN,WebSocket.CONNECTING].includes(online.ws.readyState))return online.ws;
-  let url;try{url=onlineWsUrl()}catch(e){onlineUi(e.message||'آدرس سرور نامعتبر است.');return null}
-  let ws;try{ws=new WebSocket(url)}catch(e){onlineUi('ساخت اتصال WebSocket ممکن نشد.');return null}
-  online.ws=ws;online.connected=false;online.serverReady=false;onlineUi('در حال اتصال…');
-  const timer=setTimeout(()=>{if(ws.readyState===WebSocket.CONNECTING){try{ws.close()}catch(_){}onlineUi('اتصال WebSocket برقرار نشد.')}},10000);
-  ws.addEventListener('open',()=>{clearTimeout(timer);online.connected=true;onlineUi('متصل به سرور');});
-  ws.addEventListener('message',ev=>{let m;try{m=JSON.parse(ev.data)}catch(_){return}handleOnlineMessage(ws,m)});
-  ws.addEventListener('error',()=>{if(ws.readyState!==WebSocket.OPEN)onlineUi('خطا در اتصال آنلاین.')});
-  ws.addEventListener('close',ev=>{clearTimeout(timer);if(ws.__tomtomPingTimer)clearInterval(ws.__tomtomPingTimer);if(online.ws===ws)online.ws=null;online.connected=false;online.serverReady=false;online.started=false;onlineUi(ev&&ev.code?`اتصال قطع شد (${ev.code})`:'اتصال قطع شد');rejectPending('اتصال آنلاین قطع شد.');});
-  ws.__tomtomPingTimer=setInterval(()=>{if(ws.readyState===WebSocket.OPEN)sendOnline({type:'ping'})},20000);
+  if(online.ws && (online.ws.readyState===WebSocket.OPEN || online.ws.readyState===WebSocket.CONNECTING)) return online.ws;
+  if(location.protocol==='file:'){
+    setOnlineUI('سرور اجرا نشده است',false);
+    roomMessage.textContent='برای آنلاین واقعی پروژه را با «npm install» و سپس «npm start» اجرا کنید.';
+    return null;
+  }
+  const ws=new WebSocket(wsUrl()); online.ws=ws;
+  setOnlineUI('در حال اتصال…',false);
+  ws.onopen=()=>{online.connected=true;setOnlineUI('متصل به سرور',true)};
+  ws.onclose=()=>{online.connected=false;online.started=false;setOnlineUI('اتصال قطع شد',false);roomMessage.textContent='اتصال به سرور قطع شد.'};
+  ws.onerror=()=>{setOnlineUI('خطا در اتصال',false)};
+  ws.onmessage=(event)=>{
+    let msg; try{msg=JSON.parse(event.data)}catch{return}
+    if(msg.type==='match_waiting'){ roomMessage.textContent='⏳ منتظر حریف تصادفی…'; roomMessage.classList.add('match-wait'); }
+    if(msg.type==='match_found'){ online.room=msg.room; online.color=msg.color; modeEl.value='human'; roomCode.value=msg.room; roomMessage.textContent='⚡ حریف پیدا شد؛ بازی آماده است.'; roomMessage.classList.remove('match-wait'); }
+    if(msg.type==='room_created' || msg.type==='room_joined'){
+      online.room=msg.room; online.color=msg.color; roomCode.value=msg.room;
+      modeEl.value='human'; blackLabel.textContent=msg.color==='w'?'WAITING…':'ONLINE';
+      roomMessage.textContent=msg.color==='w'?'اتاق ساخته شد؛ کد را برای حریف بفرست.':'وارد اتاق شدی؛ بازی آماده است.';
+    }
+    if(msg.type==='room_state'){
+      online.started=!!msg.started;
+      const me=msg.players.find(p=>p.color===online.color); const opp=msg.players.find(p=>p.color!==online.color);
+      blackLabel.textContent=online.started?(opp?.name||'ONLINE'):'WAITING…';
+      if(online.started){ roomMessage.textContent='اتصال دو بازیکن برقرار شد؛ بازی شروع شد.'; resetGame(); }
+      else roomMessage.textContent='منتظر بازیکن دوم…';
+      if(online.color==='b') boardFlipped=true; render();
+    }
+    if(msg.type==='remote_move'){
+      if(msg.color===online.color) return;
+      makeMove(msg.move,true);
+    }
+    if(msg.type==='new_game') resetGame();
+    if(msg.type==='resigned'){
+      gameOver=true; stopClock(); modalTitleEl.textContent='تسلیم'; modalTextEl.textContent=msg.color===online.color?'حریف تسلیم شد؛ شما برنده شدید.':'حریف برنده شد.'; showModal();
+    }
+    if(msg.type==='opponent_left'){ online.started=false; blackLabel.textContent='OFFLINE'; roomMessage.textContent='حریف از اتاق خارج شد.'; }
+    if(msg.type==='error') roomMessage.textContent=msg.message||'خطای آنلاین';
+  };
   return ws;
 }
-function waitForOnline(timeout=10000){
-  const ws=connectOnline();
-  if(!ws)return Promise.reject(new Error('اتصال WebSocket برقرار نشد.'));
-  // IMPORTANT: OPEN is enough. The welcome message is informational, not a gate.
-  if(ws.readyState===WebSocket.OPEN)return Promise.resolve(ws);
-  return new Promise((resolve,reject)=>{
-    let done=false;
-    const finish=(fn,v)=>{if(done)return;done=true;clearTimeout(timer);ws.removeEventListener('open',onOpen);ws.removeEventListener('error',onError);ws.removeEventListener('close',onClose);fn(v)};
-    const onOpen=()=>finish(resolve,ws);
-    const onError=()=>finish(reject,new Error('خطا در WebSocket.'));
-    const onClose=()=>finish(reject,new Error('اتصال WebSocket قطع شد.'));
-    const timer=setTimeout(()=>finish(reject,new Error('اتصال آنلاین در زمان تعیین‌شده برقرار نشد.')),timeout);
-    ws.addEventListener('open',onOpen,{once:true});ws.addEventListener('error',onError,{once:true});ws.addEventListener('close',onClose,{once:true});
-  });
+function createOnlineRoom(){
+  roomCode.value=Math.random().toString(36).slice(2,8).toUpperCase();
+  const ws=connectOnline(); if(!ws)return;
+  const send=()=>sendOnline({type:'create_room',room:roomCode.value,name:profile.name});
+  if(ws.readyState===WebSocket.OPEN) send(); else ws.addEventListener('open',send,{once:true});
 }
-function onlineRequest(type,payload={},timeout=10000){
-  return waitForOnline(timeout).then(ws=>new Promise((resolve,reject)=>{
-    const reqId='r_'+Date.now()+'_'+Math.random().toString(36).slice(2);
-    window.__onlinePending=window.__onlinePending||{};
-    const timer=setTimeout(()=>{delete window.__onlinePending[reqId];reject(new Error('سرور در زمان تعیین‌شده پاسخ نداد.'))},timeout);
-    window.__onlinePending[reqId]={resolve:(m)=>{clearTimeout(timer);delete window.__onlinePending[reqId];resolve(m)},reject:(e)=>{clearTimeout(timer);delete window.__onlinePending[reqId];reject(e)}};
-    try{ws.send(JSON.stringify({type,...payload,reqId}))}catch(e){clearTimeout(timer);delete window.__onlinePending[reqId];reject(e)}
-  }));
+function joinOnlineRoom(){
+  const id=roomCode.value.trim().toUpperCase();
+  if(!id){roomMessage.textContent='کد اتاق را وارد کنید.';return}
+  const ws=connectOnline(); if(!ws)return;
+  const send=()=>sendOnline({type:'join_room',room:id,name:profile.name});
+  if(ws.readyState===WebSocket.OPEN) send(); else ws.addEventListener('open',send,{once:true});
 }
-function makeRoomCode(){const chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';let out='';for(let i=0;i<6;i++)out+=chars[Math.floor(Math.random()*chars.length)];return out}
-window.connectOnline=connectOnline;window.sendOnline=sendOnline;window.waitForOnline=waitForOnline;window.onlineRequest=onlineRequest;
-const serverInput=document.getElementById('serverUrlInput');const savedServer=localStorage.getItem('tomtom_server_url');if(serverInput&&savedServer)serverInput.value=savedServer;
-const saveServerBtn=document.getElementById('saveServerUrl');if(saveServerBtn)saveServerBtn.addEventListener('click',()=>{let v=serverInput.value.trim().replace(/\/health$/i,'').replace(/\/$/,'');if(v){localStorage.setItem('tomtom_server_url',v);serverInput.value=v;document.getElementById('roomMessage').textContent='آدرس سرور ذخیره شد.'}});
-const testServerBtn=document.getElementById('testServer');if(testServerBtn)testServerBtn.addEventListener('click',async()=>{const box=document.getElementById('roomMessage');box.textContent='در حال تست اتصال…';try{const r=await fetch(serverBase()+'/health',{cache:'no-store'});const d=await r.json();if(!d.ok)throw new Error('سرور سالم نیست.');await waitForOnline(10000);box.textContent='اتصال آنلاین سالم است — '+(d.version||'server') }catch(e){box.textContent=e.message||'اتصال آنلاین برقرار نشد.'}});
-const closeOnlineBtn=document.getElementById('closeOnline');if(closeOnlineBtn)closeOnlineBtn.addEventListener('click',closeCurrentPanel);
-const hostRoomBtn=document.getElementById('hostRoom');if(hostRoomBtn)hostRoomBtn.addEventListener('click',async()=>{const input=document.getElementById('roomCode'),box=document.getElementById('roomMessage');let code=(input.value||'').trim().toUpperCase();if(!code)code=makeRoomCode();if(!/^[A-Z0-9]{3,8}$/.test(code)){box.textContent='کد اتاق باید ۳ تا ۸ حرف انگلیسی یا عدد باشد.';return}input.value=code;box.textContent='در حال ساخت اتاق…';hostRoomBtn.disabled=true;try{await onlineRequest('create_room',{room:code,name:profile.name,username:localStorage.getItem('tomtom_username')||''})}catch(e){box.textContent=e.message||'ساخت اتاق انجام نشد.'}finally{hostRoomBtn.disabled=false}});
-const joinRoomBtn=document.getElementById('joinRoom');if(joinRoomBtn)joinRoomBtn.addEventListener('click',async()=>{const input=document.getElementById('roomCode'),box=document.getElementById('roomMessage'),code=(input.value||'').trim().toUpperCase();if(!code){box.textContent='کد اتاق را وارد کنید.';return}if(!/^[A-Z0-9]{3,8}$/.test(code)){box.textContent='کد اتاق نامعتبر است.';return}input.value=code;box.textContent='در حال ورود به اتاق…';joinRoomBtn.disabled=true;try{await onlineRequest('join_room',{room:code,name:profile.name,username:localStorage.getItem('tomtom_username')||''})}catch(e){box.textContent=e.message||'ورود به اتاق انجام نشد.'}finally{joinRoomBtn.disabled=false}});
-const startOnlineGameBtn=document.getElementById('startOnlineGame');
-if(startOnlineGameBtn)startOnlineGameBtn.addEventListener('click',async()=>{
-  const box=document.getElementById('roomMessage');
-  if(!online.room){if(box)box.textContent='ابتدا اتاق را بسازید یا وارد شوید.';return}
-  startOnlineGameBtn.disabled=true;
-  if(box)box.textContent='در حال شروع بازی…';
-  try{await onlineRequest('start_game',{room:online.room},10000);}
-  catch(e){startOnlineGameBtn.disabled=false;if(box)box.textContent=e.message||'شروع بازی انجام نشد.';}
+function resetOnline(){ online.started=false; online.room=null; online.color=null; }
+
+// ===== PRO CONTROLS =====
+const whitePlayer=document.getElementById('whitePlayer');
+const blackPlayer=document.getElementById('blackPlayer');
+const whiteClock=document.getElementById('whiteClock');
+const blackClock=document.getElementById('blackClock');
+const undoBtn=document.getElementById('undoBtn');
+const flipBtn=document.getElementById('flipBtn');
+const pauseBtn=document.getElementById('pauseBtn');
+const pauseOverlay=document.getElementById('pauseOverlay');
+const resumeBtn=document.getElementById('resumeBtn');
+const settingsBtn=document.getElementById('settingsBtn');
+const settingsPanel=document.getElementById('settings');
+const closeSettings=document.getElementById('closeSettings');
+const saveSettings=document.getElementById('saveSettings');
+const timeControl=document.getElementById('timeControl');
+const theme=document.getElementById('theme');
+const smartModeEl=document.getElementById('smartMode');
+const blackLabel=document.getElementById('blackLabel');
+
+function openSettings(){
+  settingsPanel.classList.add('show');
+  settingsPanel.setAttribute('aria-hidden','false');
+}
+settingsBtn.addEventListener('click',openSettings);
+closeSettings.addEventListener('click',hideSettings);
+saveSettings.addEventListener('click',()=>{
+  timeControlSeconds=Number(timeControl.value);
+  smartMode=smartModeEl.checked;
+  pieceSet=pieceSetEl.value;
+  aiDepth=smartMode?2:1;
+  document.body.classList.remove('theme-midnight','theme-emerald');
+  if(theme.value==='midnight')document.body.classList.add('theme-midnight');
+  if(theme.value==='emerald')document.body.classList.add('theme-emerald');
+  hideSettings();resetGame();
 });
-const copyRoomBtn=document.getElementById('copyRoom');if(copyRoomBtn)copyRoomBtn.addEventListener('click',()=>navigator.clipboard?.writeText(document.getElementById('roomCode').value).then(()=>document.getElementById('roomMessage').textContent='کد اتاق کپی شد.').catch(()=>{}));
 
-// ===== HOME SCREEN =====
-const offlineBtn=document.getElementById('offlineBtn');
-const homeOnlineBtn=document.getElementById('homeOnlineBtn');
-const homeProfileBtn=document.getElementById('homeProfileBtn');
-const homeRankBtn=document.getElementById('homeRankBtn');
-const homeSettingsBtn=document.getElementById('homeSettingsBtn');
-const homeClanBtn=document.getElementById('homeClanBtn');
-const homeSettingsTile=document.getElementById('homeSettingsTile');
-const backHomeBtn=document.getElementById('backHomeBtn');
+newGameBtn.addEventListener('click',()=>{resetGame(); if(online.connected) sendOnline({type:'new_game',room:online.room})});
+againBtn.addEventListener('click',()=>{resetGame(); if(online.connected) sendOnline({type:'new_game',room:online.room})});
+closeModal.addEventListener('click',hideModal);
+modeEl.addEventListener('change',()=>{
+  blackLabel.textContent=modeEl.value==='computer'?'TOMTOM AI':'PLAYER 2';
+  resetGame();
+});
+soundBtn.addEventListener('click',()=>{
+  soundOn=!soundOn;
+  soundBtn.textContent=soundOn?'🔊':'🔇';
+  footerEl.textContent=`TOMTOM CHESS PRO • صدا ${soundOn?'روشن':'خاموش'} است.`;
+  if(soundOn)playTone();
+});
+undoBtn.addEventListener('click',()=>{
+  // In computer mode undo the human+AI pair where possible.
+  undoMove();
+  if(modeEl.value==='computer' && turn==='b' && history.length)undoMove();
+});
+flipBtn.addEventListener('click',()=>{boardFlipped=!boardFlipped;render()});
+pauseBtn.addEventListener('click',togglePause);
+resumeBtn.addEventListener('click',()=>{paused=false;hidePause();startClock()});
 
-const offlineModeModal=document.getElementById('offlineModeModal');
-function closeOfflineMode(){if(offlineModeModal){offlineModeModal.classList.remove('show');offlineModeModal.setAttribute('aria-hidden','true');document.body.classList.remove('offline-modal-open');}}
-function openOfflineMode(){if(offlineModeModal){document.body.classList.add('offline-modal-open');offlineModeModal.classList.add('show');offlineModeModal.setAttribute('aria-hidden','false');}}
-function startOfflineMode(mode){
-  closeOfflineMode();
-  if(modeEl) modeEl.value=mode;
-  enterGameNav();
-  setTimeout(()=>resetGame(),0);
-}
-function enterOffline(){ openOfflineMode(); }
-if(offlineBtn) offlineBtn.addEventListener('click',enterOffline);
-const localTwoPlayerBtn=document.getElementById('localTwoPlayerBtn');
-const aiMatchBtn=document.getElementById('aiMatchBtn');
-const cancelOfflineMode=document.getElementById('cancelOfflineMode');
-if(localTwoPlayerBtn)localTwoPlayerBtn.addEventListener('click',()=>startOfflineMode('human'));
-if(aiMatchBtn)aiMatchBtn.addEventListener('click',()=>startOfflineMode('computer'));
-if(cancelOfflineMode)cancelOfflineMode.addEventListener('click',closeOfflineMode);
-if(backHomeBtn) backHomeBtn.addEventListener('click',()=>{ closeOfflineMode(); hideModal(); hidePause(); closeAllPanels(); goHomeFromGame(); });
-if(homeOnlineBtn) homeOnlineBtn.addEventListener('click',()=>openHomePanelNav(onlinePanel));
-if(homeProfileBtn) homeProfileBtn.addEventListener('click',()=>openHomePanelNav(profilePanel));
-if(homeRankBtn) homeRankBtn.addEventListener('click',()=>openHomePanelNav(rankPanel));
-if(homeClanBtn) homeClanBtn.addEventListener('click',()=>{openHomePanelNav(clanPanel); if(window.tomtomLoadClan)window.tomtomLoadClan();});
-if(homeSettingsBtn) homeSettingsBtn.addEventListener('click',()=>openHomePanelNav(settingsPanel));
-if(homeSettingsTile) homeSettingsTile.addEventListener('click',()=>openHomePanelNav(settingsPanel));
+// Splash
+setTimeout(()=>document.getElementById('splash').classList.add('hide'),1050);
 
-function syncOrientationClass(){
-  const landscape=window.matchMedia('(orientation: landscape)').matches;
-  document.body.classList.toggle('is-landscape',landscape);
-  document.body.classList.toggle('is-portrait',!landscape);
-}
-syncOrientationClass();
-window.addEventListener('resize',syncOrientationClass,{passive:true});
-window.addEventListener('orientationchange',()=>setTimeout(syncOrientationClass,80),{passive:true});
+
+const profileBtn=document.getElementById('profileBtn'),profilePanel=document.getElementById('profilePanel');
+const closeProfile=document.getElementById('closeProfile'),saveProfile=document.getElementById('saveProfile');
+const playerName=document.getElementById('playerName'),avatarSelect=document.getElementById('avatarSelect');
+const profileName=document.getElementById('profileName'),profileAvatar=document.getElementById('profileAvatar');
+const level=document.getElementById('level'),xp=document.getElementById('xp'),rating=document.getElementById('rating');
+const wins=document.getElementById('wins'),losses=document.getElementById('losses'),draws=document.getElementById('draws');
+const onlineBtn=document.getElementById('onlineBtn'),onlinePanel=document.getElementById('onlinePanel');
+const closeOnline=document.getElementById('closeOnline'),copyRoom=document.getElementById('copyRoom'),hostRoom=document.getElementById('hostRoom'),joinRoom=document.getElementById('joinRoom');
+const onlineState=document.getElementById('onlineState'),onlineDot=document.getElementById('onlineDot');
+const roomCode=document.getElementById('roomCode'),roomMessage=document.getElementById('roomMessage');
+const pieceSetEl=document.getElementById('pieceSet');
+
+function showPanel(p){p.classList.add('show');p.setAttribute('aria-hidden','false')}
+function hidePanel(p){p.classList.remove('show');p.setAttribute('aria-hidden','true')}
+profileBtn.addEventListener('click',()=>{playerName.value=profile.name;avatarSelect.value=profile.avatar;showPanel(profilePanel)});
+closeProfile.addEventListener('click',()=>hidePanel(profilePanel));
+saveProfile.addEventListener('click',()=>{
+  profile.name=playerName.value.trim()||'TOMTOM PLAYER';
+  profile.avatar=avatarSelect.value;saveProfileData();hidePanel(profilePanel);
+});
+onlineBtn.addEventListener('click',()=>{showPanel(onlinePanel); connectOnline()});
+closeOnline.addEventListener('click',()=>hidePanel(onlinePanel));
+hostRoom.addEventListener('click',createOnlineRoom);
+joinRoom.addEventListener('click',joinOnlineRoom);
+copyRoom.addEventListener('click',async()=>{
+  try{await navigator.clipboard.writeText(roomCode.value);roomMessage.textContent='کد اتاق کپی شد.'}
+  catch(_){roomMessage.textContent='کد اتاق: '+roomCode.value}
+});
+
+pieceSetEl.addEventListener('change',()=>{pieceSet=pieceSetEl.value;render()});
 
 // Start
 blackLabel.textContent='PLAYER 2';
-loadProfile();
-saveProfileData();
-if (homeRatingEl) homeRatingEl.textContent=profile.rating;
-if(!window.history.state || !window.history.state.tomtom){ window.history.replaceState({tomtom:'home'},'',location.href); }
-showHome();
-finishSplash();
+
+// Premium asset navigation
+for (const b of document.querySelectorAll('.premium-modes button[data-mode]')) b.addEventListener('click',()=>{ modeEl.value=b.dataset.mode; resetGame(); });
+document.getElementById('premiumOnline')?.addEventListener('click',()=>document.getElementById('onlinePanel')?.classList.add('show'));
+document.getElementById('premiumRank')?.addEventListener('click',()=>document.getElementById('rankPanel')?.classList.add('show'));
+document.getElementById('premiumProfile')?.addEventListener('click',()=>document.getElementById('profilePanel')?.classList.add('show'));
+document.getElementById('premiumSettings')?.addEventListener('click',()=>document.getElementById('settings')?.classList.add('show'));
+document.getElementById('premiumShop')?.addEventListener('click',()=>{ alert('فروشگاه در Level 1 به‌صورت آماده توسعه قرار دارد؛ تم صفحه و ست مهره از تنظیمات قابل انتخاب است.'); });
+document.getElementById('premiumChat')?.addEventListener('click',()=>document.getElementById('onlinePanel')?.classList.add('show'));

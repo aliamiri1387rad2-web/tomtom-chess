@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#101b33"/><stop offset="1" stop-color="#496b99"/></linearGradient></defs><rect width="320" height="320" rx="24" fill="url(#g)"/><g opacity=".35"><rect x='0' y='0' width='40' height='40' fill='#fff'/>
+<rect x='0' y='80' width='40' height='40' fill='#fff'/>
+<rect x='0' y='160' width='40' height='40' fill='#fff'/>
+<rect x='0' y='240' width='40' height='40' fill='#fff'/>
+<rect x='40' y='40' width='40' height='40' fill='#fff'/>
+<rect x='40' y='120' width='40' height='40' fill='#fff'/>
+<rect x='40' y='200' width='40' height='40' fill='#fff'/>
+<rect x='40' y='280' width='40' height='40' fill='#fff'/>
+<rect x='80' y='0' width='40' height='40' fill='#fff'/>
+<rect x='80' y='80' width='40' height='40' fill='#fff'/>
+<rect x='80' y='160' width='40' height='40' fill='#fff'/>
+<rect x='80' y='240' width='40' height='40' fill='#fff'/>
+<rect x='120' y='40' width='40' height='40' fill='#fff'/>
+<rect x='120' y='120' width='40' height='40' fill='#fff'/>
+<rect x='120' y='200' width='40' height='40' fill='#fff'/>
+<rect x='120' y='280' width='40' height='40' fill='#fff'/>
+<rect x='160' y='0' width='40' height='40' fill='#fff'/>
+<rect x='160' y='80' width='40' height='40' fill='#fff'/>
+<rect x='160' y='160' width='40' height='40' fill='#fff'/>
+<rect x='160' y='240' width='40' height='40' fill='#fff'/>
+<rect x='200' y='40' width='40' height='40' fill='#fff'/>
+<rect x='200' y='120' width='40' height='40' fill='#fff'/>
+<rect x='200' y='200' width='40' height='40' fill='#fff'/>
+<rect x='200' y='280' width='40' height='40' fill='#fff'/>
+<rect x='240' y='0' width='40' height='40' fill='#fff'/>
+<rect x='240' y='80' width='40' height='40' fill='#fff'/>
+<rect x='240' y='160' width='40' height='40' fill='#fff'/>
+<rect x='240' y='240' width='40' height='40' fill='#fff'/>
+<rect x='280' y='40' width='40' height='40' fill='#fff'/>
+<rect x='280' y='120' width='40' height='40' fill='#fff'/>
+<rect x='280' y='200' width='40' height='40' fill='#fff'/>
+<rect x='280' y='280' width='40' height='40' fill='#fff'/></g><circle cx="160" cy="160" r="80" fill="none" stroke="#e9d18a" stroke-width="3" opacity=".5"/></svg>
