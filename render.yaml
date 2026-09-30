@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: tomtom-chess-online
+    name: tomtom-chess
     runtime: node
     numInstances: 1
     buildCommand: npm install && npm run build

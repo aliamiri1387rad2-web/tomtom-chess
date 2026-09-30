@@ -50,7 +50,6 @@
     <section class="home-grid">
       <button id="homeProfileBtn" class="home-tile"><strong>♙</strong><b>پروفایل</b><small>بازیکن و آمار</small></button>
       <button id="homeRankBtn" class="home-tile"><strong>🏆</strong><b>رنکینگ</b><small>جدول آنلاین</small></button>
-      <button id="homeClanBtn" class="home-tile"><strong>🏰</strong><b>کلن‌ها</b><small>جنگ و گفت‌وگوی کلنی</small></button>
       <button id="homeSettingsTile" class="home-tile"><strong>⚙</strong><b>تنظیمات</b><small>صدا و ظاهر</small></button>
     </section>
 
@@ -125,7 +124,6 @@
         <div class="side-card chat-card">
           <div class="side-card-head"><b>💬 چت بازی</b><span id="chatState">آماده</span></div>
           <div class="chat-messages" id="chatMessages"><div class="chat-empty">برای شروع گفتگو پیام بفرستید.</div></div>
-          <div class="emoji-row" data-target="chatInput"><button type="button">😀</button><button type="button">😂</button><button type="button">🔥</button><button type="button">👏</button><button type="button">♟️</button><button type="button">🏆</button></div>
           <form class="chat-form" id="chatForm">
             <input id="chatInput" class="chat-input" maxlength="180" autocomplete="off" placeholder="پیام شما…">
             <button class="chat-send" type="submit">➤</button>
@@ -201,7 +199,6 @@
       <label>کد اتاق<input id="roomCode" class="text-input" maxlength="8" placeholder="مثلاً TOM123" value=""></label>
       <div class="online-actions"><button id="copyRoom" class="secondary-btn">کپی کد</button><button id="hostRoom" class="primary-btn">ساخت اتاق</button><button id="joinRoom" class="secondary-btn">ورود به اتاق</button></div>
       <div id="roomMessage" class="room-message"></div>
-      <button id="startOnlineGame" class="primary-btn online-start-btn" style="display:none;width:100%;margin-top:8px">▶ شروع بازی</button>
       <button id="matchmakeBtn" class="primary-btn" style="width:100%;margin-top:8px">⚡ بازی سریع با حریف تصادفی</button>
     </div>
   </div>
@@ -219,27 +216,10 @@
     </div>
   </div>
 
-  <div class="settings" id="clanPanel" aria-hidden="true">
-    <div class="settings-card clan-card">
-      <div class="settings-head"><h2>🏰 TOMTOM CLANS</h2><button id="closeClan" class="icon-btn">×</button></div>
-      <div id="clanBody" class="clan-body"><div class="room-message">در حال بررسی کلن…</div></div>
-    </div>
-  </div>
-
-  <div class="settings" id="clanChatPanel" aria-hidden="true">
-    <div class="settings-card clan-card">
-      <div class="settings-head"><h2>💬 گفت‌وگوی کلن</h2><button id="closeClanChat" class="icon-btn">×</button></div>
-      <div id="clanChatState" class="online-status"><span class="dot"></span><b>کلن</b></div>
-      <div id="clanChatMessages" class="chat-messages clan-chat-messages"><div class="chat-empty">گفت‌وگوی اعضای کلن.</div></div>
-      <div class="emoji-row" data-target="clanChatInput"><button type="button">😀</button><button type="button">😂</button><button type="button">🔥</button><button type="button">👏</button><button type="button">⚔️</button><button type="button">🏰</button></div>
-      <form id="clanChatForm" class="chat-form"><input id="clanChatInput" class="chat-input" maxlength="180" placeholder="پیام برای اعضای کلن…"><button class="chat-send" type="submit">➤</button></form>
-    </div>
-  </div>
-
   <div class="settings" id="rankPanel" aria-hidden="true">
     <div class="settings-card">
-      <div class="settings-head"><h2>🏆 لیگ و رنکینگ آنلاین</h2><button id="closeRank" class="icon-btn">×</button></div>
-      <div class="league-note">حریف تصادفی بر اساس ریتینگ نزدیک‌تر پیدا می‌شود. لیگ با ریتینگ تعیین می‌شود: برنز، نقره‌ای، طلایی، پلاتینیوم، الماس و مستر.</div><div id="leaderboard" class="leaderboard"><div class="room-message">در حال دریافت رنکینگ…</div></div>
+      <div class="settings-head"><h2>🏆 رنکینگ آنلاین</h2><button id="closeRank" class="icon-btn">×</button></div>
+      <div id="leaderboard" class="leaderboard"><div class="room-message">در حال دریافت رنکینگ…</div></div>
       <button id="refreshRank" class="secondary-btn" style="width:100%;margin-top:10px">به‌روزرسانی</button>
       <hr class="panel-sep">
       <h3>بازی‌های ذخیره‌شده</h3>

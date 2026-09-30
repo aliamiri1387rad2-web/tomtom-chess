@@ -1,38 +1,21 @@
-# TOMTOM CHESS — ONLINE
+# TOMTOM CHESS V7.1 — Level 1 + Five-Level Roadmap
 
-نسخه آنلاین واقعی TOMTOM CHESS با WebSocket.
+Base: TOMTOM CHESS V7 / GitHub Final V67 core.
 
-## اجرا روی کامپیوتر
+## Level 1 implemented on the V7 core
+- Home screen separated from gameplay
+- Offline AI and local two-player
+- Online private rooms + random matchmaking
+- Profiles, rating, leaderboard and settings
+- Game clock, move history, chat, pause/restart and touch controls
+- Level/progression entry point
+- League badge assets and premium visual assets
 
-1. Node.js نصب باشد.
-2. داخل همین پوشه اجرا کنید:
+## Five-level architecture
+1. Core Battle — implemented
+2. Progression — XP, seasons, missions, achievements, full stats and rewards
+3. Clan — creation/search/join, 50 members, roles, badge, chat, online status
+4. Clan Wars — 3 attacks, scoring, war table, war league, promotion/relegation, history
+5. World & Shop — boards, pieces, move effects, profile frames, badges, events and currency
 
-```bash
-npm install
-npm start
-```
-
-3. مرورگر را باز کنید:
-
-`http://localhost:8080`
-
-4. از داخل «بازی آنلاین» روی «ساخت اتاق» بزنید.
-5. کد اتاق را برای بازیکن دوم بفرستید.
-6. بازیکن دوم همان آدرس سایت را باز کند، کد را وارد کند و «ورود به اتاق» را بزند.
-
-## بازی از دو دستگاه در اینترنت
-
-برای اینترنت عمومی، `server.js` باید روی یک سرور/هاست Node.js با WebSocket اجرا شود. سپس آدرس HTTPS سایت را به هر دو بازیکن بدهید. کد اتاق از طریق WebSocket روی همان سرور هماهنگ می‌شود.
-
-اگر سایت با HTTPS اجرا شود، کلاینت به صورت خودکار از `wss://` استفاده می‌کند.
-
-## نکته
-
-این نسخه حرکت‌های قانونی را در مرورگر شطرنج کنترل می‌کند و سرور نقش هماهنگ‌کننده اتاق و انتقال حرکت را دارد. برای محصول رقابتی واقعی، مرحله بعدی می‌تواند اعتبارسنجی کامل حرکت‌ها روی سرور، احراز هویت، ذخیره بازی و سیستم رتبه‌بندی آنلاین باشد.
-
-
-### V5 UI stability
-- The chessboard keeps a fixed square layout while moves are rendered.
-- Move rendering no longer applies a scale animation to the whole board.
-- Scroll position is preserved when the board is re-rendered.
-- The board shell uses layout containment to prevent page reflow.
+`index.html` is at the ZIP root. Render can use `npm install && npm run build` and `npm start`.
