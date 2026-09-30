@@ -63,7 +63,7 @@ function goHomeFromGame(){
   showHome();
 }
 function openHomePanelNav(panel){
-  const key=panel===onlinePanel?'online':panel===profilePanel?'profile':panel===rankPanel?'rank':'settings';
+  const key=panel===onlinePanel?'online':panel===profilePanel?'profile':panel===rankPanel?'rank':panel===clanPanel?'clan':panel===clanChatPanel?'clanchat':'settings';
   window.history.pushState({tomtom:key},'',location.href);
   openHomePanel(panel);
 }
@@ -77,6 +77,8 @@ window.addEventListener('popstate',()=>{
   else if(st==='online'){ openHomePanel(onlinePanel); }
   else if(st==='profile'){ openHomePanel(profilePanel); }
   else if(st==='rank'){ openHomePanel(rankPanel); }
+  else if(st==='clan'){ openHomePanel(clanPanel); if(window.tomtomLoadClan)window.tomtomLoadClan(); }
+  else if(st==='clanchat'){ openHomePanel(clanChatPanel); }
   else if(st==='settings'){ openHomePanel(settingsPanel); }
   else { showHome(); }
 });
@@ -418,6 +420,7 @@ async function makeMove(move, fromRemote=false, fromAI=false) {
   if (animationBusy || gameOver || paused) return;
   // AI is strictly Black in offline computer mode. Reject any accidental AI move that is not Black.
   if (fromAI && (online.connected || modeEl.value !== 'computer' || turn !== 'b' || color(board[move.fr][move.fc]) !== 'b' || (board[move.tr][move.tc] && color(board[move.tr][move.tc]) === 'b'))) return;
+  if (online.connected && !fromRemote && !online.started) return;
   if (online.connected && !fromRemote && online.started && turn !== online.color) return;
   // In offline AI mode the human is always White; Black moves only through the AI.
   if (!online.connected && modeEl.value === 'computer' && turn === 'b' && !fromAI) return;
@@ -456,7 +459,7 @@ async function makeMove(move, fromRemote=false, fromAI=false) {
   updateStatus();
   startClock();
 
-  if (online.connected && !fromRemote) sendOnline({type:'move', room:online.room, color:online.color, move});
+  if (online.connected && online.started && !fromRemote) sendOnline({type:'move', room:online.room, color:online.color, move});
 
   if (!gameOver && !online.connected && modeEl.value === 'computer' && turn === 'b' && smartMode) {
     if (computerTimer) clearTimeout(computerTimer);
@@ -769,6 +772,7 @@ function handleSquareClick(r,c) {
   if (gameOver || animationBusy || paused) return;
   // Offline AI mode: the player controls White only. Never let a tap play Black.
   if (!online.connected && modeEl.value === 'computer' && turn !== 'w') return;
+  if (online.connected && !online.started) return;
   if (online.connected && online.started && turn !== online.color) return;
 
   if (selected) {
@@ -803,11 +807,26 @@ const settingsPanel=document.getElementById('settings');
 const profilePanel=document.getElementById('profilePanel');
 const onlinePanel=document.getElementById('onlinePanel');
 const rankPanel=document.getElementById('rankPanel');
+const clanPanel=document.getElementById('clanPanel');
+const clanChatPanel=document.getElementById('clanChatPanel');
 const playerName=document.getElementById('playerName');
 const avatarSelect=document.getElementById('avatarSelect');
 const whitePlayer=document.getElementById('whitePlayer');
 const blackPlayer=document.getElementById('blackPlayer');
 const blackLabel=document.getElementById('blackLabel');
+const whiteLabel=document.getElementById('whiteLabel');
+function updateOpponentPresence(players){
+  const list=Array.isArray(players)?players:[];
+  const w=list.find(p=>p.color==='w');
+  const b=list.find(p=>p.color==='b');
+  const set=(color,p)=>{
+    const label=document.getElementById(color==='w'?'whiteLabel':'blackLabel');
+    const el=document.getElementById(color==='w'?'whitePresence':'blackPresence');
+    if(label && p?.name) label.textContent=p.name;
+    if(el){const on=!!p;el.classList.toggle('offline',!on);el.innerHTML='<i></i> '+(on?'آنلاین':'آفلاین');}
+  };
+  set('w',w); set('b',b);
+}
 
 function loadProfile(){
   try{
@@ -823,6 +842,7 @@ function saveProfileData(){
   if(pa)pa.textContent=profile.avatar;
   if(rating)rating.textContent=profile.rating;
   if(xp)xp.textContent=profile.xp;
+  if(typeof window.updateTomtomRankUI==='function') window.updateTomtomRankUI(profile.rating);
   if(level)level.textContent=profile.level;
   for(const [id,val] of [['wins',profile.wins],['losses',profile.losses],['draws',profile.draws]]){const el=document.getElementById(id);if(el)el.textContent=val}
 }
@@ -833,6 +853,7 @@ function awardResult(result){
   while(profile.xp>=100){profile.xp-=100;profile.level++}
   saveProfileData();
   if(typeof window.tomtomSyncResult==='function') window.tomtomSyncResult(result);
+  if(typeof window.tomtomClanResult==='function' && online.connected && online.started) window.tomtomClanResult(result);
 }
 function updateClocks(){
   const f=s=>`${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
@@ -959,19 +980,15 @@ updateAILevelNote();
 const musicEnabledEl=document.getElementById('musicEnabled');const masterVolumeEl=document.getElementById('masterVolume');const masterVolumeValue=document.getElementById('masterVolumeValue');if(masterVolumeEl)masterVolumeEl.addEventListener('input',()=>{masterVolume=Math.max(0,Math.min(1,Number(masterVolumeEl.value)/100));if(masterVolumeValue)masterVolumeValue.value=Math.round(masterVolume*100)+'٪';applyAudioSettings();});if(musicEnabledEl)musicEnabledEl.addEventListener('change',()=>{musicEnabledEl.checked=false;musicOn=false;setMusic(false);});const saveSettingsBtn=document.getElementById('saveSettings');if(saveSettingsBtn)saveSettingsBtn.addEventListener('click',()=>{timeControlSeconds=Number(document.getElementById('timeControl')?.value)||600;pieceSet=document.getElementById('pieceSet')?.value||'classic';smartMode=!!document.getElementById('smartMode')?.checked;aiLevel=aiLevelEl?.value||'medium';musicOn=false;saveAudioSettings();settingsPanel.classList.remove('show');settingsPanel.setAttribute('aria-hidden','true');resetGame()});
 
 
-// ===== ONLINE ARENA CONNECTION V65 =====
+// ===== ONLINE ARENA — CLEAN REBUILD =====
 function serverBase(){
   let v=(localStorage.getItem('tomtom_server_url')||'https://tomtom-chess.onrender.com').trim();
-  v=v.replace(/\/health$/i,'').replace(/\/$/,'');
-  return v;
+  return v.replace(/\/health$/i,'').replace(/\/$/,'');
 }
 function onlineWsUrl(){
-  const base=serverBase();
-  const u=new URL(base);
-  if(u.protocol==='https:')u.protocol='wss:';
-  else if(u.protocol==='http:')u.protocol='ws:';
-  if(!/^wss?:$/.test(u.protocol))throw new Error('آدرس سرور نامعتبر است.');
-  u.pathname='/';u.search='';u.hash='';
+  const u=new URL(serverBase());
+  u.protocol=u.protocol==='https:'?'wss:':'ws:';
+  u.pathname='/ws';u.search='';u.hash='';
   return u.toString();
 }
 function sendOnline(msg){
@@ -980,122 +997,118 @@ function sendOnline(msg){
   try{ws.send(JSON.stringify(msg));return true}catch(e){console.warn('sendOnline',e);return false}
 }
 function addChat(name,text,me=false){const box=document.getElementById('chatMessages');if(!box)return;box.querySelector('.chat-empty')?.remove();const el=document.createElement('div');el.className='chat-msg'+(me?' me':'');const b=document.createElement('b');b.textContent=me?'شما':name;const sp=document.createElement('span');sp.textContent=text;el.append(b,sp);box.appendChild(el);box.scrollTop=box.scrollHeight}
+function onlineUi(text){const el=document.getElementById('onlineState');if(el)el.textContent=text;const dot=document.getElementById('onlineDot');if(dot)dot.classList.toggle('connected',!!online.connected)}
+function rejectPending(message){const pending=window.__onlinePending||{};for(const key of Object.keys(pending)){try{pending[key].reject(new Error(message))}catch(_){}delete pending[key]}}
+function handleOnlineMessage(ws,m){
+  if(!m||typeof m!=='object')return;
+  if(m.type==='connected'){online.serverVersion=m.serverVersion||'unknown';online.serverReady=true;return}
+  if(m.type==='room_created'||m.type==='room_joined'){
+    online.room=m.room;online.color=m.color;online.started=false;
+    const rc=document.getElementById('roomCode');if(rc)rc.value=m.room;
+    const box=document.getElementById('roomMessage');if(box)box.textContent=m.type==='room_created'?'اتاق '+m.room+' ساخته شد؛ کد را برای بازیکن دوم بفرستید.':'با موفقیت وارد اتاق '+m.room+' شدید؛ منتظر حریف…';
+    const cs=document.getElementById('chatState');if(cs)cs.textContent='منتظر';
+    updateOpponentPresence([{color:m.color,name:profile.name}]);
+  }else if(m.type==='room_state'){
+    const wasStarted=online.started;
+    online.room=m.room;online.started=!!m.started;
+    const rc=document.getElementById('roomCode');if(rc)rc.value=m.room;
+    const box=document.getElementById('roomMessage');if(box)box.textContent=m.started?'هر دو بازیکن آماده‌اند؛ بازی شروع شده است.':'منتظر بازیکن دوم…';
+    const cs=document.getElementById('chatState');if(cs)cs.textContent=m.started?'آنلاین':'منتظر';
+    updateOpponentPresence(m.players||[]);
+    const sb=document.getElementById('startOnlineGame');if(sb){sb.style.display=(!m.started&&m.players&&m.players.length>=2)?'block':'none';sb.disabled=!(m.players&&m.players.length>=2);}
+    if(m.started&&!wasStarted) resetGame();
+  }else if(m.type==='game_started'){
+    online.started=true;
+    const sb=document.getElementById('startOnlineGame');if(sb)sb.style.display='none';
+    const box=document.getElementById('roomMessage');if(box)box.textContent='🎮 بازی شروع شد؛ نوبت سفید است.';
+    const cs=document.getElementById('chatState');if(cs)cs.textContent='آنلاین';
+    // The online panel is only the lobby. When the server starts the match,
+    // actually switch both players into the chess screen before resetting it.
+    if(navState()!=='game') enterGameNav(); else showGameScreen();
+    resetGame();
+  }else if(m.type==='match_found'){
+    online.room=m.room;online.color=m.color;online.started=true;window.__tomtomSearching=false;
+    const mm=document.getElementById('matchmakeBtn');if(mm)mm.textContent='⚡ بازی سریع با حریف تصادفی';
+    const rc=document.getElementById('roomCode');if(rc)rc.value=m.room;
+    const box=document.getElementById('roomMessage');if(box)box.textContent='حریف پیدا شد؛ '+(m.color==='w'?'شما سفید هستید.':'شما سیاه هستید.');
+    const cs=document.getElementById('chatState');if(cs)cs.textContent='آنلاین';
+    updateOpponentPresence([{color:m.color,name:profile.name},{color:m.color==='w'?'b':'w',name:m.color==='w'?'PLAYER 2':'PLAYER 1'}]);
+    if(navState()!=='game') enterGameNav(); else showGameScreen();
+    resetGame();
+  }else if(m.type==='match_waiting'){
+    const box=document.getElementById('roomMessage');if(box)box.textContent='⏳ در صف پیدا کردن حریف…';
+    const cs=document.getElementById('chatState');if(cs)cs.textContent='جستجو';
+  }else if(m.type==='match_cancelled'){
+    window.__tomtomSearching=false;const mm=document.getElementById('matchmakeBtn');if(mm)mm.textContent='⚡ بازی سریع با حریف تصادفی';
+    const box=document.getElementById('roomMessage');if(box)box.textContent='جستجوی حریف لغو شد.';
+  }else if(m.type==='remote_move'&&m.move){makeMove(m.move,true)}
+  else if(m.type==='new_game'){resetGame()}
+  else if(m.type==='resigned'){online.started=false;const box=document.getElementById('roomMessage');if(box)box.textContent='حریف تسلیم شد.'}
+  else if(m.type==='chat'&&m.color!==online.color){addChat(m.name||'حریف',m.text,false)}
+  else if(m.type==='opponent_left'){
+    online.started=false;const sb=document.getElementById('startOnlineGame');if(sb)sb.style.display='none';const box=document.getElementById('roomMessage');if(box)box.textContent='حریف از اتاق خارج شد.';const cs=document.getElementById('chatState');if(cs)cs.textContent='منتظر';
+  }else if(m.type==='error'){
+    const box=document.getElementById('roomMessage');if(box)box.textContent=m.message||'خطا از طرف سرور.';
+  }
+  const pending=window.__onlinePending||{};
+  if(m.reqId&&pending[m.reqId]){
+    if(m.type==='error')pending[m.reqId].reject(new Error(m.message||'خطای سرور'));
+    else if(['room_created','room_joined','match_found','match_waiting','match_cancelled','left_room','game_started'].includes(m.type))pending[m.reqId].resolve(m);
+  }
+}
 function connectOnline(){
   if(online.ws&&[WebSocket.OPEN,WebSocket.CONNECTING].includes(online.ws.readyState))return online.ws;
-  let url;
-  try{url=onlineWsUrl()}catch(e){$('onlineState').textContent=e.message||'آدرس سرور نامعتبر';return null}
-  let ws;
-  try{ws=new WebSocket(url)}catch(e){$('onlineState').textContent='ساخت اتصال WebSocket ممکن نشد.';return null}
-  online.ws=ws;online.connected=false;online.serverReady=false;
-  $('onlineState').textContent='در حال اتصال…';$('onlineDot').classList.remove('connected');
-  const failTimer=setTimeout(()=>{
-    if(ws.readyState===WebSocket.CONNECTING){try{ws.close()}catch(_){} $('onlineState').textContent='اتصال WebSocket برقرار نشد.'}
-  },9000);
-  ws.addEventListener('open',()=>{clearTimeout(failTimer);online.connected=true;$('onlineState').textContent='متصل به سرور';$('onlineDot').classList.add('connected')});
-  ws.addEventListener('close',ev=>{clearTimeout(failTimer);online.connected=false;online.serverReady=false;online.started=false;if(online.ws===ws)online.ws=null;const detail=ev&&ev.code?` (${ev.code}${ev.reason?': '+ev.reason:''})`:'';$('onlineState').textContent='اتصال قطع شد'+detail;$('onlineDot').classList.remove('connected');if(window.__onlinePending){for(const k of Object.keys(window.__onlinePending)){try{window.__onlinePending[k].reject(new Error('اتصال WebSocket قطع شد.'))}catch(_){}delete window.__onlinePending[k]}}});
-  ws.addEventListener('error',()=>{$('onlineState').textContent='خطا در WebSocket؛ اتصال WSS برقرار نشد.'});
-  ws.addEventListener('message',ev=>{let m;try{m=JSON.parse(ev.data)}catch(_){return}
-    if(m.type==='connected'){online.serverReady=true;$('onlineState').textContent='متصل به سرور'}
-    else if(m.type==='room_created'||m.type==='room_joined'){
-      online.room=m.room;online.color=m.color;online.started=false;
-      $('roomCode').value=m.room;
-      $('roomMessage').textContent=m.type==='room_created'?'اتاق '+m.room+' ساخته شد؛ کد را برای بازیکن دوم بفرستید.':'با موفقیت وارد اتاق '+m.room+' شدید؛ منتظر شروع بازی…';
-      $('chatState').textContent='منتظر';
-    }
-    else if(m.type==='room_state'){
-      online.room=m.room;online.started=!!m.started;
-      $('roomCode').value=m.room;
-      $('roomMessage').textContent=m.started?'حریف وارد شد؛ بازی شروع شد.':'منتظر بازیکن دوم…';
-      $('chatState').textContent=m.started?'آنلاین':'منتظر';
-    }
-    else if(m.type==='match_found'){
-      online.room=m.room;online.color=m.color;online.started=true;window.__tomtomSearching=false;const mm=document.getElementById('matchmakeBtn');if(mm)mm.textContent='⚡ بازی سریع با حریف تصادفی';$('roomCode').value=m.room;
-      $('roomMessage').textContent='حریف پیدا شد؛ '+(m.color==='w'?'شما سفید هستید.':'شما سیاه هستید.');
-      $('chatState').textContent='آنلاین';
-      resetGame();
-    }
-    else if(m.type==='match_waiting'){
-      $('roomMessage').textContent='⏳ در صف پیدا کردن حریف…';$('chatState').textContent='جستجو';
-    }
-    else if(m.type==='match_cancelled'){window.__tomtomSearching=false;const mm=document.getElementById('matchmakeBtn');if(mm)mm.textContent='⚡ بازی سریع با حریف تصادفی';$('roomMessage').textContent='جستجوی حریف لغو شد.';$('chatState').textContent='آماده'}
-    else if(m.type==='remote_move'&&m.move){makeMove(m.move,true)}
-    else if(m.type==='new_game'){resetGame()}
-    else if(m.type==='chat'){addChat(m.name||'حریف',m.text,false)}
-    else if(m.type==='opponent_left'){online.started=false;$('roomMessage').textContent='حریف از اتاق خارج شد.';$('chatState').textContent='منتظر'}
-    else if(m.type==='error'){
-      $('roomMessage').textContent=m.message||'خطا از طرف سرور.';
-      if(window.__onlinePending){
-        if(m.reqId&&window.__onlinePending[m.reqId])window.__onlinePending[m.reqId].reject(new Error(m.message||'خطای سرور'));
-        else {const key=Object.keys(window.__onlinePending)[0];if(key)window.__onlinePending[key].reject(new Error(m.message||'خطای سرور'))}
-      }
-    }
-    if(window.__onlinePending){
-      if(m.reqId&&window.__onlinePending[m.reqId]&&['room_created','room_joined','match_found','match_waiting'].includes(m.type)){
-        window.__onlinePending[m.reqId].resolve(m);
-      }else if(['room_created','room_joined','match_found','match_waiting'].includes(m.type)){
-        // Backward compatibility: older deployed servers may answer without reqId.
-        const key=Object.keys(window.__onlinePending).find(k=>window.__onlinePending[k]&&(window.__onlinePending[k].type===m.type||(window.__onlinePending[k].type==='matchmake'&&['match_waiting','match_found'].includes(m.type))));
-        if(key)window.__onlinePending[key].resolve(m);
-      }
-    }
-  });
-  ws.__tomtomPingTimer&&clearInterval(ws.__tomtomPingTimer);
+  let url;try{url=onlineWsUrl()}catch(e){onlineUi(e.message||'آدرس سرور نامعتبر است.');return null}
+  let ws;try{ws=new WebSocket(url)}catch(e){onlineUi('ساخت اتصال WebSocket ممکن نشد.');return null}
+  online.ws=ws;online.connected=false;online.serverReady=false;onlineUi('در حال اتصال…');
+  const timer=setTimeout(()=>{if(ws.readyState===WebSocket.CONNECTING){try{ws.close()}catch(_){}onlineUi('اتصال WebSocket برقرار نشد.')}},10000);
+  ws.addEventListener('open',()=>{clearTimeout(timer);online.connected=true;onlineUi('متصل به سرور');});
+  ws.addEventListener('message',ev=>{let m;try{m=JSON.parse(ev.data)}catch(_){return}handleOnlineMessage(ws,m)});
+  ws.addEventListener('error',()=>{if(ws.readyState!==WebSocket.OPEN)onlineUi('خطا در اتصال آنلاین.')});
+  ws.addEventListener('close',ev=>{clearTimeout(timer);if(ws.__tomtomPingTimer)clearInterval(ws.__tomtomPingTimer);if(online.ws===ws)online.ws=null;online.connected=false;online.serverReady=false;online.started=false;onlineUi(ev&&ev.code?`اتصال قطع شد (${ev.code})`:'اتصال قطع شد');rejectPending('اتصال آنلاین قطع شد.');});
   ws.__tomtomPingTimer=setInterval(()=>{if(ws.readyState===WebSocket.OPEN)sendOnline({type:'ping'})},20000);
   return ws;
 }
-function waitForOnline(timeout=9000){
+function waitForOnline(timeout=10000){
   const ws=connectOnline();
   if(!ws)return Promise.reject(new Error('اتصال WebSocket برقرار نشد.'));
+  // IMPORTANT: OPEN is enough. The welcome message is informational, not a gate.
   if(ws.readyState===WebSocket.OPEN)return Promise.resolve(ws);
   return new Promise((resolve,reject)=>{
     let done=false;
     const finish=(fn,v)=>{if(done)return;done=true;clearTimeout(timer);ws.removeEventListener('open',onOpen);ws.removeEventListener('error',onError);ws.removeEventListener('close',onClose);fn(v)};
-    const onOpen=()=>finish(resolve,ws),onError=()=>finish(reject,new Error('خطا در WebSocket.')),onClose=()=>finish(reject,new Error('اتصال WebSocket قطع شد.'));
-    const timer=setTimeout(()=>finish(reject,new Error('زمان اتصال تمام شد.')),timeout);
+    const onOpen=()=>finish(resolve,ws);
+    const onError=()=>finish(reject,new Error('خطا در WebSocket.'));
+    const onClose=()=>finish(reject,new Error('اتصال WebSocket قطع شد.'));
+    const timer=setTimeout(()=>finish(reject,new Error('اتصال آنلاین در زمان تعیین‌شده برقرار نشد.')),timeout);
     ws.addEventListener('open',onOpen,{once:true});ws.addEventListener('error',onError,{once:true});ws.addEventListener('close',onClose,{once:true});
   });
 }
 function onlineRequest(type,payload={},timeout=10000){
-  return waitForOnline().then(ws=>new Promise((resolve,reject)=>{
-    const reqId='r'+Date.now()+Math.random().toString(16).slice(2);
+  return waitForOnline(timeout).then(ws=>new Promise((resolve,reject)=>{
+    const reqId='r_'+Date.now()+'_'+Math.random().toString(36).slice(2);
     window.__onlinePending=window.__onlinePending||{};
     const timer=setTimeout(()=>{delete window.__onlinePending[reqId];reject(new Error('سرور در زمان تعیین‌شده پاسخ نداد.'))},timeout);
-    window.__onlinePending[reqId]={type:type,resolve:(m)=>{clearTimeout(timer);delete window.__onlinePending[reqId];resolve(m)},reject:(e)=>{clearTimeout(timer);delete window.__onlinePending[reqId];reject(e)}};
+    window.__onlinePending[reqId]={resolve:(m)=>{clearTimeout(timer);delete window.__onlinePending[reqId];resolve(m)},reject:(e)=>{clearTimeout(timer);delete window.__onlinePending[reqId];reject(e)}};
     try{ws.send(JSON.stringify({type,...payload,reqId}))}catch(e){clearTimeout(timer);delete window.__onlinePending[reqId];reject(e)}
   }));
 }
-function makeRoomCode(){
-  const chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';let out='';
-  for(let i=0;i<6;i++)out+=chars[Math.floor(Math.random()*chars.length)];
-  return out;
-}
+function makeRoomCode(){const chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';let out='';for(let i=0;i<6;i++)out+=chars[Math.floor(Math.random()*chars.length)];return out}
 window.connectOnline=connectOnline;window.sendOnline=sendOnline;window.waitForOnline=waitForOnline;window.onlineRequest=onlineRequest;
-const serverInput=document.getElementById('serverUrlInput');
-const savedServer=localStorage.getItem('tomtom_server_url');if(serverInput&&savedServer)serverInput.value=savedServer;
+const serverInput=document.getElementById('serverUrlInput');const savedServer=localStorage.getItem('tomtom_server_url');if(serverInput&&savedServer)serverInput.value=savedServer;
 const saveServerBtn=document.getElementById('saveServerUrl');if(saveServerBtn)saveServerBtn.addEventListener('click',()=>{let v=serverInput.value.trim().replace(/\/health$/i,'').replace(/\/$/,'');if(v){localStorage.setItem('tomtom_server_url',v);serverInput.value=v;document.getElementById('roomMessage').textContent='آدرس سرور ذخیره شد.'}});
-const testServerBtn=document.getElementById('testServer');if(testServerBtn)testServerBtn.addEventListener('click',async()=>{
-  const box=document.getElementById('roomMessage');box.textContent='در حال تست HTTP و WebSocket…';
-  try{const r=await fetch(serverBase()+'/health',{cache:'no-store'});const d=await r.json();if(!d.ok)throw new Error('HTTP health failed');await waitForOnline(9000);box.textContent='سرور و WebSocket سالم و متصل هستند.'}
-  catch(e){box.textContent=e.message||'اتصال WebSocket برقرار نشد.';console.warn('online test',e)}
-});
+const testServerBtn=document.getElementById('testServer');if(testServerBtn)testServerBtn.addEventListener('click',async()=>{const box=document.getElementById('roomMessage');box.textContent='در حال تست اتصال…';try{const r=await fetch(serverBase()+'/health',{cache:'no-store'});const d=await r.json();if(!d.ok)throw new Error('سرور سالم نیست.');await waitForOnline(10000);box.textContent='اتصال آنلاین سالم است — '+(d.version||'server') }catch(e){box.textContent=e.message||'اتصال آنلاین برقرار نشد.'}});
 const closeOnlineBtn=document.getElementById('closeOnline');if(closeOnlineBtn)closeOnlineBtn.addEventListener('click',closeCurrentPanel);
-const hostRoomBtn=document.getElementById('hostRoom');if(hostRoomBtn)hostRoomBtn.addEventListener('click',async()=>{
-  const input=document.getElementById('roomCode'),box=document.getElementById('roomMessage');let code=(input.value||'').trim().toUpperCase();
-  if(!code)code=makeRoomCode();
-  if(!/^[A-Z0-9]{3,8}$/.test(code)){box.textContent='کد اتاق باید ۳ تا ۸ حرف انگلیسی یا عدد باشد.';return}
-  input.value=code;box.textContent='در حال ساخت اتاق '+code+'…';hostRoomBtn.disabled=true;
-  try{await onlineRequest('create_room',{room:code,name:profile.name,username:localStorage.getItem('tomtom_username')||''});}
-  catch(e){box.textContent=e.message||'ساخت اتاق انجام نشد.'}
-  finally{hostRoomBtn.disabled=false}
-});
-const joinRoomBtn=document.getElementById('joinRoom');if(joinRoomBtn)joinRoomBtn.addEventListener('click',async()=>{
-  const input=document.getElementById('roomCode'),box=document.getElementById('roomMessage'),code=(input.value||'').trim().toUpperCase();
-  if(!code){box.textContent='کد اتاق را وارد کنید.';return}
-  if(!/^[A-Z0-9]{3,8}$/.test(code)){box.textContent='کد اتاق نامعتبر است.';return}
-  input.value=code;box.textContent='در حال ورود به اتاق '+code+'…';joinRoomBtn.disabled=true;
-  try{await onlineRequest('join_room',{room:code,name:profile.name,username:localStorage.getItem('tomtom_username')||''});}
-  catch(e){box.textContent=e.message||'ورود به اتاق انجام نشد.'}
-  finally{joinRoomBtn.disabled=false}
+const hostRoomBtn=document.getElementById('hostRoom');if(hostRoomBtn)hostRoomBtn.addEventListener('click',async()=>{const input=document.getElementById('roomCode'),box=document.getElementById('roomMessage');let code=(input.value||'').trim().toUpperCase();if(!code)code=makeRoomCode();if(!/^[A-Z0-9]{3,8}$/.test(code)){box.textContent='کد اتاق باید ۳ تا ۸ حرف انگلیسی یا عدد باشد.';return}input.value=code;box.textContent='در حال ساخت اتاق…';hostRoomBtn.disabled=true;try{await onlineRequest('create_room',{room:code,name:profile.name,username:localStorage.getItem('tomtom_username')||''})}catch(e){box.textContent=e.message||'ساخت اتاق انجام نشد.'}finally{hostRoomBtn.disabled=false}});
+const joinRoomBtn=document.getElementById('joinRoom');if(joinRoomBtn)joinRoomBtn.addEventListener('click',async()=>{const input=document.getElementById('roomCode'),box=document.getElementById('roomMessage'),code=(input.value||'').trim().toUpperCase();if(!code){box.textContent='کد اتاق را وارد کنید.';return}if(!/^[A-Z0-9]{3,8}$/.test(code)){box.textContent='کد اتاق نامعتبر است.';return}input.value=code;box.textContent='در حال ورود به اتاق…';joinRoomBtn.disabled=true;try{await onlineRequest('join_room',{room:code,name:profile.name,username:localStorage.getItem('tomtom_username')||''})}catch(e){box.textContent=e.message||'ورود به اتاق انجام نشد.'}finally{joinRoomBtn.disabled=false}});
+const startOnlineGameBtn=document.getElementById('startOnlineGame');
+if(startOnlineGameBtn)startOnlineGameBtn.addEventListener('click',async()=>{
+  const box=document.getElementById('roomMessage');
+  if(!online.room){if(box)box.textContent='ابتدا اتاق را بسازید یا وارد شوید.';return}
+  startOnlineGameBtn.disabled=true;
+  if(box)box.textContent='در حال شروع بازی…';
+  try{await onlineRequest('start_game',{room:online.room},10000);}
+  catch(e){startOnlineGameBtn.disabled=false;if(box)box.textContent=e.message||'شروع بازی انجام نشد.';}
 });
 const copyRoomBtn=document.getElementById('copyRoom');if(copyRoomBtn)copyRoomBtn.addEventListener('click',()=>navigator.clipboard?.writeText(document.getElementById('roomCode').value).then(()=>document.getElementById('roomMessage').textContent='کد اتاق کپی شد.').catch(()=>{}));
 
@@ -1105,6 +1118,7 @@ const homeOnlineBtn=document.getElementById('homeOnlineBtn');
 const homeProfileBtn=document.getElementById('homeProfileBtn');
 const homeRankBtn=document.getElementById('homeRankBtn');
 const homeSettingsBtn=document.getElementById('homeSettingsBtn');
+const homeClanBtn=document.getElementById('homeClanBtn');
 const homeSettingsTile=document.getElementById('homeSettingsTile');
 const backHomeBtn=document.getElementById('backHomeBtn');
 
@@ -1129,6 +1143,7 @@ if(backHomeBtn) backHomeBtn.addEventListener('click',()=>{ closeOfflineMode(); h
 if(homeOnlineBtn) homeOnlineBtn.addEventListener('click',()=>openHomePanelNav(onlinePanel));
 if(homeProfileBtn) homeProfileBtn.addEventListener('click',()=>openHomePanelNav(profilePanel));
 if(homeRankBtn) homeRankBtn.addEventListener('click',()=>openHomePanelNav(rankPanel));
+if(homeClanBtn) homeClanBtn.addEventListener('click',()=>{openHomePanelNav(clanPanel); if(window.tomtomLoadClan)window.tomtomLoadClan();});
 if(homeSettingsBtn) homeSettingsBtn.addEventListener('click',()=>openHomePanelNav(settingsPanel));
 if(homeSettingsTile) homeSettingsTile.addEventListener('click',()=>openHomePanelNav(settingsPanel));
 
